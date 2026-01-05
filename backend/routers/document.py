@@ -79,6 +79,11 @@ class SmartEditRequest(BaseModel):
     command: str  # Comando natural: "edite o título para X", "mude a conclusão", etc.
 
 
+class ImproveTextRequest(BaseModel):
+    filename: str
+    text: str  # Texto selecionado pelo usuário para melhorar
+
+
 UPLOAD_DIR = "uploads"
 PROCESSED_DIR = "processed"
 
@@ -474,6 +479,170 @@ async def smart_edit(request: SmartEditRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao processar edição: {str(e)}")
+
+
+@router.post("/improve-text")
+async def improve_text(request: ImproveTextRequest):
+    """
+    Melhora um texto selecionado usando IA e substitui automaticamente no documento.
+    """
+    from services.ai import get_model
+    from docx import Document
+
+    # Buscar arquivo
+    paths_to_check = [
+        f"{PROCESSED_DIR}/edited_{request.filename}",
+        f"{PROCESSED_DIR}/formatted_{request.filename}",
+        f"{UPLOAD_DIR}/{request.filename}"
+    ]
+
+    file_path = None
+    for path in paths_to_check:
+        if os.path.exists(path):
+            file_path = path
+            break
+
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    try:
+        # Extrair contexto do documento
+        document_context = extract_text_from_docx(file_path)[:5000]
+
+        # Usar IA para melhorar o texto
+        model = get_model()
+        prompt = f"""
+        Você é um especialista em escrita acadêmica e normas ABNT.
+
+        CONTEXTO DO DOCUMENTO:
+        {document_context}
+
+        TEXTO ORIGINAL SELECIONADO PELO USUÁRIO:
+        {request.text}
+
+        TAREFA:
+        Reescreva o texto selecionado melhorando:
+        1. Clareza e coesão
+        2. Linguagem formal acadêmica
+        3. Gramática e ortografia
+        4. Fluidez das ideias
+        5. Conformidade com padrões ABNT (se aplicável)
+
+        REGRAS:
+        - Mantenha o significado e as ideias principais
+        - Use linguagem formal e impessoal
+        - Evite primeira pessoa do singular
+        - Use conectivos adequados (Além disso, Portanto, Contudo, Nesse sentido)
+        - Mantenha o mesmo tamanho aproximado (não reduza nem expanda demais)
+        - Se houver citações, mantenha-as
+
+        Retorne APENAS o texto melhorado, sem explicações ou comentários adicionais.
+        """
+
+        response = model.generate_content(prompt)
+        improved_text = response.text.strip()
+
+        # Encontrar e substituir o texto no documento
+        doc = Document(file_path)
+        text_replaced = False
+        paragraph_number = None
+
+        # Normalizar texto para busca (remover espaços extras, pontuação, case)
+        import re
+        def normalize(text):
+            # Remove pontuação, espaços extras e converte para lowercase
+            text = re.sub(r'[^\w\s]', '', text.lower())
+            return ' '.join(text.split())
+
+        search_normalized = normalize(request.text)
+
+        # Buscar em todos os parágrafos
+        best_match = None
+        best_match_idx = None
+        best_match_score = 0
+
+        for idx, paragraph in enumerate(doc.paragraphs):
+            if not paragraph.text.strip():
+                continue
+
+            para_normalized = normalize(paragraph.text)
+
+            # Calcular similaridade (busca exata ou parcial)
+            if search_normalized == para_normalized:
+                # Match exato
+                best_match = paragraph
+                best_match_idx = idx
+                best_match_score = 100
+                break
+            elif search_normalized in para_normalized:
+                # Match parcial completo
+                score = len(search_normalized) / len(para_normalized) * 100
+                if score > best_match_score:
+                    best_match = paragraph
+                    best_match_idx = idx
+                    best_match_score = score
+            elif len(search_normalized) > 20:
+                # Para textos longos, buscar primeiras palavras
+                search_words = search_normalized.split()[:5]
+                search_prefix = ' '.join(search_words)
+                if search_prefix in para_normalized:
+                    score = 50
+                    if score > best_match_score:
+                        best_match = paragraph
+                        best_match_idx = idx
+                        best_match_score = score
+
+        # Log para debug
+        print(f"[DEBUG] Texto procurado (normalizado): {search_normalized[:100]}")
+        print(f"[DEBUG] Melhor match score: {best_match_score}")
+        if best_match:
+            print(f"[DEBUG] Parágrafo encontrado: {best_match.text[:100]}")
+
+        # Se encontrou match razoável (>40% similaridade)
+        if best_match and best_match_score > 40:
+            # Substituir texto
+            for run in best_match.runs:
+                run.text = ''
+
+            if best_match.runs:
+                best_match.runs[0].text = improved_text
+            else:
+                best_match.add_run(improved_text)
+
+            text_replaced = True
+            paragraph_number = best_match_idx + 1
+            print(f"[DEBUG] Texto substituído no parágrafo {paragraph_number}")
+
+        if not text_replaced:
+            print(f"[DEBUG] Texto NÃO encontrado no documento")
+            return {
+                "success": False,
+                "original_text": request.text,
+                "improved_text": improved_text,
+                "message": "Texto melhorado, mas não foi possível localizar no documento para substituição automática. Copie manualmente."
+            }
+
+        # Salvar documento editado
+        output_path = f"{PROCESSED_DIR}/edited_{request.filename}"
+        doc.save(output_path)
+
+        # Converter para PDF
+        pdf_path = output_path.replace(".docx", "_preview.pdf")
+        convert_docx_to_pdf(output_path, pdf_path)
+
+        return {
+            "success": True,
+            "original_text": request.text,
+            "improved_text": improved_text,
+            "paragraph_number": paragraph_number,
+            "message": f"Texto melhorado e substituído no parágrafo {paragraph_number}"
+        }
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Erro ao melhorar texto:")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erro ao melhorar texto: {str(e)}")
 
 
 @router.get("/structure/{filename}")

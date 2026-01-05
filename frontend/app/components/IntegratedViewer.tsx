@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
 import { Send, Bot, User, Sparkles, CheckCircle, Download, Loader2, X, ZoomIn, ZoomOut, FileText, Maximize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import FloatingToolbar from './FloatingToolbar';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 
@@ -55,6 +56,11 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
     const [pdfKey, setPdfKey] = useState(0); // Para forçar reload do PDF
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // Estados para FloatingToolbar
+    const [selectedText, setSelectedText] = useState('');
+    const [toolbarPosition, setToolbarPosition] = useState<{ x: number; y: number } | null>(null);
+    const pdfContainerRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         // Mensagem inicial com análise - reseta quando muda de documento
         const analysisMessage = buildAnalysisMessage(analysis);
@@ -94,6 +100,75 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Detectar seleção de texto no PDF
+    useEffect(() => {
+        const handleTextSelection = () => {
+            const selection = window.getSelection();
+            const text = selection?.toString().trim();
+
+            if (text && text.length > 0 && pdfContainerRef.current) {
+                const range = selection?.getRangeAt(0);
+                const rect = range?.getBoundingClientRect();
+
+                if (rect) {
+                    setSelectedText(text);
+                    setToolbarPosition({
+                        x: rect.left + (rect.width / 2),
+                        y: rect.top
+                    });
+                }
+            } else {
+                setSelectedText('');
+                setToolbarPosition(null);
+            }
+        };
+
+        document.addEventListener('mouseup', handleTextSelection);
+        document.addEventListener('keyup', handleTextSelection);
+
+        return () => {
+            document.removeEventListener('mouseup', handleTextSelection);
+            document.removeEventListener('keyup', handleTextSelection);
+        };
+    }, []);
+
+    const handleImproveText = (improvedText: string, paragraphNumber?: number) => {
+        // Exibir texto melhorado no chat
+        const message = paragraphNumber
+            ? `✨ **Texto melhorado e substituído no parágrafo ${paragraphNumber}!**\n\n"${improvedText}"\n\n✅ O documento foi atualizado automaticamente.`
+            : `✨ **Texto melhorado:**\n\n"${improvedText}"\n\n💡 *Não foi possível localizar o texto no documento. Copie e cole manualmente.*`;
+
+        setMessages(prev => [...prev, {
+            role: 'ai',
+            content: message
+        }]);
+
+        // Forçar reload do PDF se houve substituição
+        if (paragraphNumber) {
+            setPdfKey(prev => prev + 1);
+            setPdfError(null);
+        }
+
+        // Fechar toolbar
+        setSelectedText('');
+        setToolbarPosition(null);
+    };
+
+    const handleFormatText = () => {
+        setMessages(prev => [...prev, {
+            role: 'ai',
+            content: `📏 Para formatar o texto selecionado segundo ABNT:\n\n1. Use o botão "Aplicar Formatação" para formatar todo o documento\n2. Ou digite: "formate o parágrafo X" onde X é o número do parágrafo`
+        }]);
+
+        setSelectedText('');
+        setToolbarPosition(null);
+    };
+
+    const handleCloseToolbar = () => {
+        setSelectedText('');
+        setToolbarPosition(null);
+    };
 
     const handleSendMessage = async () => {
         if (!input.trim() || isLoading) return;
@@ -285,7 +360,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
                     </div>
 
                     {/* PDF Content */}
-                    <div className="flex-1 overflow-y-auto p-8 flex justify-center items-start">
+                    <div ref={pdfContainerRef} className="flex-1 overflow-y-auto p-8 flex justify-center items-start">
                         {pdfError ? (
                             <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg">
                                 <p className="text-sm">{pdfError}</p>
@@ -418,6 +493,16 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
                     </div>
                 </div>
             </div>
+
+            {/* Floating Toolbar para seleção de texto */}
+            <FloatingToolbar
+                selectedText={selectedText}
+                position={toolbarPosition}
+                filename={filename}
+                onImprove={handleImproveText}
+                onFormat={handleFormatText}
+                onClose={handleCloseToolbar}
+            />
         </div>
     );
 }
