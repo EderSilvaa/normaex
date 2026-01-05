@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(curl:*)",
+      "Bash(findstr:*)",
+      "Bash(copy /b \"c:\\Users\\EDER\\normaex\\backend\\main.py\" +,, \"c:\\Users\\EDER\\normaex\\backend\\main.py\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

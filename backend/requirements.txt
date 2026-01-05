@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-docx
+pypdf2
+google-generativeai
+python-multipart
+pdf2docx
+PyMuPDF
+mammoth
+sse-starlette
+docx2pdf
