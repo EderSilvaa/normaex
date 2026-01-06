@@ -1,20 +1,36 @@
 import FileUpload from '../components/FileUpload';
 import Image from 'next/image';
-import { FileCheck, Sparkles, PenTool } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 
 export default function Tool() {
   return (
-    <main className="min-h-screen bg-[#0a0a0a] bg-gradient-dark">
-      {/* Background decorativo */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#Eebb4d]/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#Eebb4d]/5 rounded-full blur-3xl" />
+    <main className="min-h-screen bg-[#000000] text-gray-200 selection:bg-[#Eebb4d] selection:text-black font-sans overflow-hidden relative">
+
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] bg-[#Eebb4d]/5 rounded-full blur-[150px] animate-pulse-slow" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-900/10 rounded-full blur-[150px]" />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center p-4 pt-16 pb-20">
-        {/* Logo */}
-        <div className="mb-8">
-          <div className="relative w-48 h-16">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-6">
+
+        {/* Navigation Back */}
+        <div className="absolute top-6 left-6 md:top-10 md:left-10">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-gray-500 hover:text-white transition-colors text-sm font-medium group"
+          >
+            <div className="bg-white/5 border border-white/10 p-2 rounded-full group-hover:bg-white/10 transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </div>
+            <span>Voltar</span>
+          </Link>
+        </div>
+
+        {/* Logo Centered */}
+        <div className="mb-12 opacity-80 hover:opacity-100 transition-opacity">
+          <div className="relative w-32 h-10">
             <Image
               src="/logo.png"
               alt="Normaex Logo"
@@ -25,63 +41,32 @@ export default function Tool() {
           </div>
         </div>
 
-        {/* Hero */}
-        <div className="text-center mb-14 max-w-3xl">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-6">
-            Seu TCC nas normas da{' '}
-            <span className="text-[#Eebb4d] glow-gold inline-block">ABNT</span>
-          </h1>
-          <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-            O copilot acadêmico que formata, revisa e ajuda você a escrever seu trabalho.
+        {/* Main Interface */}
+        <div className="w-full max-w-5xl mx-auto flex flex-col items-center">
+
+          <div className="text-center mb-10 space-y-4">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white">
+              Studio de Criação
+            </h1>
+            <p className="text-gray-400 text-lg">
+              Arraste seu TCC para começar a mágica.
+            </p>
+          </div>
+
+          {/* The App Container */}
+          <div className="w-full">
+            <FileUpload />
+          </div>
+
+        </div>
+
+        {/* Footer Info */}
+        <div className="absolute bottom-6 text-center w-full">
+          <p className="text-xs text-gray-600 font-medium tracking-widest uppercase">
+            NormaEx Intelligence Engine v2.0
           </p>
         </div>
 
-        {/* Upload Component */}
-        <FileUpload />
-
-        {/* Features */}
-        <div className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full px-4">
-          <div className="group p-6 bg-[#141414] rounded-2xl border border-[#2a2a2a] hover:border-[#Eebb4d]/50 transition-all duration-300 hover:shadow-lg hover:shadow-[#Eebb4d]/5">
-            <div className="w-12 h-12 bg-[#Eebb4d]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#Eebb4d]/20 transition-colors">
-              <FileCheck className="w-6 h-6 text-[#Eebb4d]" />
-            </div>
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Formatação Automática
-            </h2>
-            <p className="text-gray-500 text-sm leading-relaxed">
-              Margens, fontes e espaçamentos ajustados automaticamente para o padrão ABNT.
-            </p>
-          </div>
-
-          <div className="group p-6 bg-[#141414] rounded-2xl border border-[#2a2a2a] hover:border-[#Eebb4d]/50 transition-all duration-300 hover:shadow-lg hover:shadow-[#Eebb4d]/5">
-            <div className="w-12 h-12 bg-[#Eebb4d]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#Eebb4d]/20 transition-colors">
-              <Sparkles className="w-6 h-6 text-[#Eebb4d]" />
-            </div>
-            <h2 className="text-xl font-semibold text-white mb-2">
-              IA Copilot
-            </h2>
-            <p className="text-gray-500 text-sm leading-relaxed">
-              Assistente inteligente para escrever, reescrever e melhorar seus parágrafos.
-            </p>
-          </div>
-
-          <div className="group p-6 bg-[#141414] rounded-2xl border border-[#2a2a2a] hover:border-[#Eebb4d]/50 transition-all duration-300 hover:shadow-lg hover:shadow-[#Eebb4d]/5">
-            <div className="w-12 h-12 bg-[#Eebb4d]/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#Eebb4d]/20 transition-colors">
-              <PenTool className="w-6 h-6 text-[#Eebb4d]" />
-            </div>
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Revisão Inteligente
-            </h2>
-            <p className="text-gray-500 text-sm leading-relaxed">
-              Correção gramatical e de estilo para garantir um texto acadêmico impecável.
-            </p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-20 text-center text-gray-600 text-sm">
-          <p>Powered by AI</p>
-        </div>
       </div>
     </main>
   );

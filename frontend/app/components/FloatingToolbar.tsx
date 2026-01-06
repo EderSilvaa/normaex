@@ -49,7 +49,7 @@ export default function FloatingToolbar({
     const handleImprove = async () => {
         setIsImproving(true);
         try {
-            const response = await axios.post('http://localhost:8000/api/documents/improve-text', {
+            const response = await axios.post('http://localhost:8080/api/documents/improve-text', {
                 filename: filename,
                 text: selectedText
             });
@@ -74,9 +74,8 @@ export default function FloatingToolbar({
     return (
         <div
             ref={toolbarRef}
-            className={`fixed z-50 flex items-center gap-1 px-2 py-1.5 rounded-lg shadow-2xl backdrop-blur-xl bg-gray-900/95 border border-gray-700/50 transition-all duration-200 ${
-                isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
-            }`}
+            className={`fixed z-50 flex items-center gap-1 px-2 py-1.5 rounded-lg shadow-2xl backdrop-blur-xl bg-gray-900/95 border border-gray-700/50 transition-all duration-200 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+                }`}
             style={{
                 left: `${position.x - 90}px`,
                 top: `${position.y - 50}px`,

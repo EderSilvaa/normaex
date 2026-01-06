@@ -39,7 +39,7 @@ export default function DocumentPreview({
     setError(null);
 
     try {
-      const response = await fetch(`http://localhost:8000/api/documents/preview/${encodeURIComponent(filename)}`);
+      const response = await fetch(`http://localhost:8080/api/documents/preview/${encodeURIComponent(filename)}`);
 
       if (!response.ok) {
         throw new Error('Documento não encontrado');

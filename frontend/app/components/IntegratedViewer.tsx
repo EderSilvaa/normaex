@@ -194,7 +194,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
                 const newText = editParagraphMatch[2].trim();
 
                 // Chamar endpoint de edição
-                const response = await axios.post('http://localhost:8000/api/documents/edit-paragraph', {
+                const response = await axios.post('http://localhost:8080/api/documents/edit-paragraph', {
                     filename: filename,
                     paragraph_number: paragraphNumber,
                     new_text: newText
@@ -213,7 +213,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
                 const newTitle = editTitleMatch[1].trim();
 
                 // Usar o novo endpoint que identifica semanticamente qual parágrafo é o título
-                const response = await axios.post('http://localhost:8000/api/documents/edit-element', {
+                const response = await axios.post('http://localhost:8080/api/documents/edit-element', {
                     filename: filename,
                     element_type: 'titulo_principal',
                     new_text: newTitle
@@ -230,7 +230,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
 
             } else if (isEditCommand) {
                 // Comando de edição geral - usar IA para entender e executar
-                const response = await axios.post('http://localhost:8000/api/documents/smart-edit', {
+                const response = await axios.post('http://localhost:8080/api/documents/smart-edit', {
                     filename: filename,
                     command: userMessage
                 });
@@ -253,7 +253,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
 
             } else {
                 // Chat normal (perguntas, análises, etc)
-                const response = await axios.post('http://localhost:8000/api/documents/chat', {
+                const response = await axios.post('http://localhost:8080/api/documents/chat', {
                     filename: filename,
                     message: userMessage
                 });
@@ -279,7 +279,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/documents/apply', {
+            const response = await axios.post('http://localhost:8080/api/documents/apply', {
                 filename: filename
             });
 
@@ -375,7 +375,7 @@ export default function IntegratedViewer({ filename, analysis, onClose }: Integr
                             >
                                 <Document
                                     key={pdfKey}
-                                    file={`http://localhost:8000/api/documents/preview/${encodeURIComponent(filename)}?t=${pdfKey}`}
+                                    file={`http://localhost:8080/api/documents/preview/${encodeURIComponent(filename)}?t=${pdfKey}`}
                                     onLoadSuccess={({ numPages }) => {
                                         setNumPages(numPages);
                                         setPdfError(null);

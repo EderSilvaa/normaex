@@ -125,7 +125,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
         }]);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/documents/apply', {
+            const response = await axios.post('http://localhost:8080/api/documents/apply', {
                 filename: filename
             });
 
@@ -155,7 +155,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
             // Mensagem final de sucesso
             await new Promise(resolve => setTimeout(resolve, 500));
             setIsFormatted(true);
-            setDownloadUrl(`http://localhost:8000/api/documents/download/formatted_${filename}`);
+            setDownloadUrl(`http://localhost:8080/api/documents/download/formatted_${filename}`);
 
             // Atualizar preview novamente para garantir
             setPreviewKey(prev => prev + 1);
@@ -196,7 +196,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
         setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
 
         try {
-            const response = await fetch('http://localhost:8000/api/documents/write-stream', {
+            const response = await fetch('http://localhost:8080/api/documents/write-stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -243,7 +243,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
                                             content: successMsg,
                                             type: 'write',
                                             generatedText: data.generated_text,
-                                            downloadUrl: `http://localhost:8000${data.download_url}`
+                                            downloadUrl: `http://localhost:8080${data.download_url}`
                                         }]);
                                     }
                                 }
@@ -279,7 +279,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/documents/chat', {
+            const response = await axios.post('http://localhost:8080/api/documents/chat', {
                 filename: filename,
                 message: userMessage
             });
@@ -323,9 +323,8 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
                         >
                             {showPreview ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                         </button>
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            isFormatted ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-                        }`}>
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${isFormatted ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                            }`}>
                             {isFormatted ? 'Formatado' : 'Pendente'}
                         </div>
                     </div>
@@ -335,24 +334,22 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {messages.map((msg, index) => (
                         <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
-                                msg.role === 'user' ? 'bg-[#Eebb4d]/20'
+                            <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${msg.role === 'user' ? 'bg-[#Eebb4d]/20'
                                     : msg.type === 'success' ? 'bg-emerald-500/20'
-                                    : msg.type === 'write' ? 'bg-blue-500/20'
-                                    : 'bg-[#2a2a2a]'
-                            }`}>
+                                        : msg.type === 'write' ? 'bg-blue-500/20'
+                                            : 'bg-[#2a2a2a]'
+                                }`}>
                                 {msg.role === 'user' ? <User className="w-4 h-4 text-[#Eebb4d]" />
                                     : msg.type === 'success' ? <CheckCircle className="w-4 h-4 text-emerald-400" />
-                                    : msg.type === 'write' ? <PenTool className="w-4 h-4 text-blue-400" />
-                                    : <Bot className="w-4 h-4 text-gray-400" />}
+                                        : msg.type === 'write' ? <PenTool className="w-4 h-4 text-blue-400" />
+                                            : <Bot className="w-4 h-4 text-gray-400" />}
                             </div>
-                            <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed ${
-                                msg.role === 'user' ? 'bg-[#Eebb4d] text-black rounded-tr-sm'
+                            <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-[#Eebb4d] text-black rounded-tr-sm'
                                     : msg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/30 text-gray-300 rounded-tl-sm'
-                                    : msg.type === 'write' ? 'bg-blue-500/10 border border-blue-500/30 text-gray-300 rounded-tl-sm'
-                                    : msg.type === 'analysis' ? 'bg-[#1a1a1a] border border-amber-500/30 text-gray-300 rounded-tl-sm'
-                                    : 'bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 rounded-tl-sm'
-                            }`}>
+                                        : msg.type === 'write' ? 'bg-blue-500/10 border border-blue-500/30 text-gray-300 rounded-tl-sm'
+                                            : msg.type === 'analysis' ? 'bg-[#1a1a1a] border border-amber-500/30 text-gray-300 rounded-tl-sm'
+                                                : 'bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 rounded-tl-sm'
+                                }`}>
                                 {formatMessageContent(msg.content)}
                                 {msg.downloadUrl && (
                                     <a href={msg.downloadUrl} download
