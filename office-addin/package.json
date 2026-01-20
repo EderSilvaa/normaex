@@ -1,0 +1,50 @@
+{
+  "name": "normaex-office-addin",
+  "version": "1.0.0",
+  "description": "Normaex AI Office Add-in for Word",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "dev-server": "webpack serve --mode development",
+    "start": "office-addin-debugging start manifest.xml desktop",
+    "stop": "office-addin-debugging stop manifest.xml",
+    "validate": "office-addin-manifest validate manifest.xml"
+  },
+  "keywords": [
+    "office-addin",
+    "word",
+    "ai",
+    "abnt",
+    "formatacao"
+  ],
+  "author": "Normaex",
+  "license": "MIT",
+  "dependencies": {
+    "@fluentui/react": "^8.120.0",
+    "@fluentui/react-icons": "^2.0.228",
+    "axios": "^1.6.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/office-js": "^1.0.382",
+    "@types/react": "^18.2.47",
+    "@types/react-dom": "^18.2.18",
+    "@types/node": "^20.10.6",
+    "copy-webpack-plugin": "^12.0.2",
+    "css-loader": "^6.8.1",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.6.0",
+    "office-addin-debugging": "^5.0.14",
+    "office-addin-dev-certs": "^1.13.3",
+    "office-addin-manifest": "^1.13.3",
+    "source-map-loader": "^5.0.0",
+    "style-loader": "^3.3.3",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  }
+}

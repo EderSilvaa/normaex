@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TaskPaneApp">
+
+  <!-- Basic Information -->
+  <Id>f9d10b7b-3b54-4e35-91a6-3cfb1cba7542</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Normaex</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Normaex AI"/>
+  <Description DefaultValue="AI Assistant for ABNT formatting and academic writing"/>
+  <IconUrl DefaultValue="https://localhost:3001/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://localhost:3001/icon-128.png"/>
+  <SupportUrl DefaultValue="https://localhost:3001"/>
+
+  <!-- AppDomains must come before DefaultSettings -->
+  <AppDomains>
+    <AppDomain>https://localhost:3001</AppDomain>
+    <AppDomain>https://localhost:8080</AppDomain>
+  </AppDomains>
+
+  <!-- Hosts -->
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+
+  <!-- Default Settings -->
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3001/taskpane.html"/>
+  </DefaultSettings>
+
+  <!-- Permissions -->
+  <Permissions>ReadWriteDocument</Permissions>
+
+</OfficeApp>

@@ -1,0 +1,315 @@
+/* ===================================
+   NORMAEX AI - OFFICE ADD-IN STYLES
+   Cores: Gold (#Eebb4d) + Dark (#0a0a0a)
+   =================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: #fafafa;
+  background: #0a0a0a;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #000000 0%, #0a0a0a 50%, #000000 100%);
+  position: relative;
+}
+
+.app-container::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, rgba(238, 187, 77, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+  animation: pulse-glow 4s ease-in-out infinite;
+  z-index: 0;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+}
+
+.app-header {
+  background: rgba(20, 20, 20, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(238, 187, 77, 0.1);
+  padding: 24px 20px;
+  text-align: center;
+  position: relative;
+  z-index: 10;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.logo-container h1 {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #Eebb4d 0%, #f5d485 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.version {
+  background: linear-gradient(135deg, #Eebb4d 0%, #f5d485 100%);
+  color: #0a0a0a;
+  padding: 3px 10px;
+  border-radius: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 20px rgba(238, 187, 77, 0.3);
+}
+
+.tagline {
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.app-main {
+  flex: 1;
+  padding: 24px 16px;
+  overflow-y: auto;
+  position: relative;
+  z-index: 5;
+}
+
+.welcome-card {
+  background: rgba(26, 26, 26, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.welcome-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #Eebb4d, transparent);
+  opacity: 0.5;
+}
+
+.welcome-card h2 {
+  font-size: 18px;
+  color: #ffffff;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.welcome-card p {
+  color: #aaa;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.actions-section {
+  margin-bottom: 20px;
+}
+
+.actions-section h3 {
+  font-size: 14px;
+  color: #999;
+  margin-bottom: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.action-button {
+  width: 100%;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  border: none;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.action-button.primary {
+  background: linear-gradient(135deg, #Eebb4d 0%, #f5d485 100%);
+  color: #0a0a0a;
+  box-shadow: 0 4px 24px rgba(238, 187, 77, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.action-button.primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(238, 187, 77, 0.5);
+}
+
+.action-button.secondary {
+  background: rgba(26, 26, 26, 0.8);
+  color: #Eebb4d;
+  border: 1px solid rgba(238, 187, 77, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.action-button.secondary:hover {
+  background: rgba(26, 26, 26, 0.95);
+  border-color: rgba(238, 187, 77, 0.6);
+  box-shadow: 0 4px 20px rgba(238, 187, 77, 0.2);
+}
+
+.message-box {
+  background: rgba(238, 187, 77, 0.08);
+  border-left: 3px solid #Eebb4d;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.message-box p {
+  color: #e5e5e5;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.status-section {
+  background: rgba(20, 20, 20, 0.6);
+  border-radius: 16px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ccc;
+  font-size: 12px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.status-item:last-child {
+  margin-bottom: 0;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-indicator.online {
+  background: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+}
+
+.status-indicator.offline {
+  background: #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+}
+
+.app-footer {
+  background: rgba(10, 10, 10, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: #666;
+  text-align: center;
+  padding: 16px;
+  font-size: 11px;
+  position: relative;
+  z-index: 10;
+}
+
+.app-footer strong {
+  color: #Eebb4d;
+  font-weight: 700;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+  color: white;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(238, 187, 77, 0.2);
+  border-top-color: #Eebb4d;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-container p {
+  font-size: 14px;
+  font-weight: 500;
+  color: #999;
+}
+
+.app-main::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-main::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+.app-main::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 3px;
+}
+
+.app-main::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
