@@ -1,128 +1,74 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+// Services
+import { ApiService, DocumentService, StreamingService } from '../../services';
+
+// Types
+import { AnalysisResponse, Issue } from '../../types';
 
 interface AppProps {
   title: string;
 }
 
-interface Issue {
-  code: string;
-  message: string;
-  severity: string;
-  suggestion?: string;
-}
-
-interface AnalysisResult {
-  score: number;
-  issues: Issue[];
-  suggestions: string[];
-  summary: string;
-}
-
-const API_BASE = 'http://localhost:8080/api/addin';
-
 const App: React.FC<AppProps> = ({ title }) => {
+  // Estado
   const [isOfficeInitialized, setIsOfficeInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [chatInput, setChatInput] = useState('');
   const [chatResponse, setChatResponse] = useState('');
   const [activeTab, setActiveTab] = useState<'analysis' | 'write' | 'chat'>('analysis');
   const [writeInstruction, setWriteInstruction] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamProgress, setStreamProgress] = useState(0);
 
+  // Inicialização
   useEffect(() => {
     setIsOfficeInitialized(true);
     checkBackendStatus();
   }, []);
 
-  const checkBackendStatus = async () => {
+  // Verificar status do backend
+  const checkBackendStatus = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/health`);
-      if (response.ok) {
-        setBackendStatus('online');
-      } else {
-        setBackendStatus('offline');
-      }
+      await ApiService.checkHealth();
+      setBackendStatus('online');
     } catch {
       setBackendStatus('offline');
     }
-  };
+  }, []);
 
-  const getDocumentContent = async (): Promise<{ text: string; paragraphs: any[] }> => {
-    return new Promise((resolve, reject) => {
-      Word.run(async (context) => {
-        const body = context.document.body;
-        const paragraphs = body.paragraphs;
-
-        body.load('text');
-        paragraphs.load('items');
-
-        await context.sync();
-
-        const paragraphData = paragraphs.items.map((p) => {
-          p.load('text,style,font');
-          return p;
-        });
-
-        await context.sync();
-
-        const formattedParagraphs = paragraphData.map((p) => ({
-          text: p.text,
-          style: p.style || 'Normal',
-          font_name: p.font?.name || null,
-          font_size: p.font?.size || null,
-          alignment: null
-        }));
-
-        resolve({
-          text: body.text,
-          paragraphs: formattedParagraphs
-        });
-      }).catch(reject);
-    });
-  };
-
-  const analyzeDocument = async () => {
+  // Analisar documento
+  const analyzeDocument = useCallback(async () => {
     setIsLoading(true);
     setMessage('');
     setAnalysis(null);
 
     try {
-      const { text, paragraphs } = await getDocumentContent();
+      const content = await DocumentService.getDocumentContent();
 
-      if (!text.trim()) {
+      if (!content.full_text?.trim()) {
         setMessage('O documento está vazio. Adicione conteúdo para analisar.');
         setIsLoading(false);
         return;
       }
 
-      const response = await fetch(`${API_BASE}/analyze-content`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paragraphs,
-          full_text: text,
-          format_type: 'abnt'
-        })
-      });
-
-      if (!response.ok) throw new Error('Erro na análise');
-
-      const result: AnalysisResult = await response.json();
+      const result = await ApiService.analyzeContent(content);
       setAnalysis(result);
       setMessage(result.summary);
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setMessage(`Erro: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const generateText = async () => {
+  // Gerar texto (não streaming)
+  const generateText = useCallback(async () => {
     if (!writeInstruction.trim()) {
       setMessage('Digite uma instrução para gerar o texto.');
       return;
@@ -132,80 +78,105 @@ const App: React.FC<AppProps> = ({ title }) => {
     setMessage('Gerando texto...');
 
     try {
-      // Get document context
-      const { text } = await getDocumentContent();
+      const content = await DocumentService.getDocumentContent();
 
-      const response = await fetch(`${API_BASE}/write`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instruction: writeInstruction,
-          section_type: 'geral',
-          context: text.substring(0, 1000),
-          format_type: 'abnt'
-        })
+      const result = await ApiService.writeText({
+        instruction: writeInstruction,
+        section_type: 'geral',
+        context: content.full_text?.substring(0, 1000),
+        format_type: 'abnt',
       });
 
-      if (!response.ok) throw new Error('Erro na geração');
-
-      const result = await response.json();
-
-      // Insert generated text into Word
-      await Word.run(async (context) => {
-        const selection = context.document.getSelection();
-        selection.insertText(result.text, Word.InsertLocation.replace);
-        await context.sync();
-      });
-
+      await DocumentService.insertText(result.text);
       setMessage(`Texto gerado e inserido! (${result.word_count} palavras)`);
       setWriteInstruction('');
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setMessage(`Erro: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [writeInstruction]);
 
-  const sendChat = async () => {
+  // Gerar texto com streaming
+  const generateTextStreaming = useCallback(async () => {
+    if (!writeInstruction.trim()) {
+      setMessage('Digite uma instrução para gerar o texto.');
+      return;
+    }
+
+    setIsStreaming(true);
+    setStreamProgress(0);
+    setMessage('Gerando texto...');
+
+    try {
+      const content = await DocumentService.getDocumentContent();
+
+      const fullText = await StreamingService.streamWriteToDocument(
+        {
+          instruction: writeInstruction,
+          section_type: 'geral',
+          context: content.full_text?.substring(0, 1000),
+          format_type: 'abnt',
+        },
+        {
+          onProgress: (progress) => setStreamProgress(progress),
+          onError: (error) => setMessage(`Erro: ${error.message}`),
+        }
+      );
+
+      const wordCount = fullText.split(/\s+/).filter(Boolean).length;
+      setMessage(`Texto gerado! (${wordCount} palavras)`);
+      setWriteInstruction('');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setMessage(`Erro: ${errorMessage}`);
+    } finally {
+      setIsStreaming(false);
+      setStreamProgress(0);
+    }
+  }, [writeInstruction]);
+
+  // Chat
+  const sendChat = useCallback(async () => {
     if (!chatInput.trim()) return;
 
     setIsLoading(true);
     setChatResponse('');
 
     try {
-      const { text } = await getDocumentContent();
+      const content = await DocumentService.getDocumentContent();
 
-      const response = await fetch(`${API_BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: chatInput,
-          context: text.substring(0, 2000)
-        })
+      const result = await ApiService.chat({
+        message: chatInput,
+        context: content.full_text?.substring(0, 2000),
       });
 
-      if (!response.ok) throw new Error('Erro no chat');
-
-      const result = await response.json();
       setChatResponse(result.message);
       setChatInput('');
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setChatResponse(`Erro: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [chatInput]);
 
+  // Cores do score
   const getScoreColor = (score: number) => {
-    if (score >= 80) return '#10b981'; // green
-    if (score >= 60) return '#f59e0b'; // yellow
-    return '#ef4444'; // red
+    if (score >= 80) return '#10b981';
+    if (score >= 60) return '#f59e0b';
+    return '#ef4444';
   };
 
+  // Cor da severidade
+  const getSeverityColor = (severity: Issue['severity']) => {
+    if (severity === 'error') return '#ef4444';
+    if (severity === 'warning') return '#f59e0b';
+    return '#3b82f6';
+  };
+
+  // Loading screen
   if (!isOfficeInitialized) {
     return (
       <div className="loading-container">
@@ -231,18 +202,21 @@ const App: React.FC<AppProps> = ({ title }) => {
         {/* Score Display */}
         {analysis && (
           <div className="welcome-card" style={{ textAlign: 'center' }}>
-            <div style={{
-              fontSize: '48px',
-              fontWeight: 'bold',
-              color: getScoreColor(analysis.score),
-              textShadow: `0 0 20px ${getScoreColor(analysis.score)}40`
-            }}>
+            <div
+              style={{
+                fontSize: '48px',
+                fontWeight: 'bold',
+                color: getScoreColor(analysis.score),
+                textShadow: `0 0 20px ${getScoreColor(analysis.score)}40`,
+              }}
+            >
               {analysis.score}
             </div>
             <p style={{ color: '#888', marginTop: '8px' }}>Score ABNT</p>
             {analysis.issues.length > 0 && (
               <p style={{ fontSize: '12px', color: '#666', marginTop: '12px' }}>
-                {analysis.issues.length} problema{analysis.issues.length > 1 ? 's' : ''} encontrado{analysis.issues.length > 1 ? 's' : ''}
+                {analysis.issues.length} problema{analysis.issues.length > 1 ? 's' : ''} encontrado
+                {analysis.issues.length > 1 ? 's' : ''}
               </p>
             )}
           </div>
@@ -250,54 +224,28 @@ const App: React.FC<AppProps> = ({ title }) => {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <button
-            onClick={() => setActiveTab('analysis')}
-            style={{
-              flex: 1,
-              padding: '10px',
-              border: 'none',
-              borderRadius: '8px',
-              background: activeTab === 'analysis' ? '#Eebb4d' : '#1a1a1a',
-              color: activeTab === 'analysis' ? '#0a0a0a' : '#888',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            Analisar
-          </button>
-          <button
-            onClick={() => setActiveTab('write')}
-            style={{
-              flex: 1,
-              padding: '10px',
-              border: 'none',
-              borderRadius: '8px',
-              background: activeTab === 'write' ? '#Eebb4d' : '#1a1a1a',
-              color: activeTab === 'write' ? '#0a0a0a' : '#888',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            Escrever
-          </button>
-          <button
-            onClick={() => setActiveTab('chat')}
-            style={{
-              flex: 1,
-              padding: '10px',
-              border: 'none',
-              borderRadius: '8px',
-              background: activeTab === 'chat' ? '#Eebb4d' : '#1a1a1a',
-              color: activeTab === 'chat' ? '#0a0a0a' : '#888',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            Chat
-          </button>
+          {(['analysis', 'write', 'chat'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                flex: 1,
+                padding: '10px',
+                border: 'none',
+                borderRadius: '8px',
+                background: activeTab === tab ? '#Eebb4d' : '#1a1a1a',
+                color: activeTab === tab ? '#0a0a0a' : '#888',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {tab === 'analysis' ? 'Analisar' : tab === 'write' ? 'Escrever' : 'Chat'}
+            </button>
+          ))}
         </div>
 
-        {/* Tab Content */}
+        {/* Tab: Analysis */}
         {activeTab === 'analysis' && (
           <div className="actions-section">
             <button
@@ -310,18 +258,25 @@ const App: React.FC<AppProps> = ({ title }) => {
 
             {analysis && analysis.issues.length > 0 && (
               <div style={{ marginTop: '16px' }}>
-                <h4 style={{ color: '#999', fontSize: '12px', marginBottom: '8px' }}>PROBLEMAS ENCONTRADOS</h4>
+                <h4 style={{ color: '#999', fontSize: '12px', marginBottom: '8px' }}>
+                  PROBLEMAS ENCONTRADOS
+                </h4>
                 {analysis.issues.slice(0, 5).map((issue, i) => (
-                  <div key={i} style={{
-                    background: '#1a1a1a',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    marginBottom: '8px',
-                    borderLeft: `3px solid ${issue.severity === 'error' ? '#ef4444' : issue.severity === 'warning' ? '#f59e0b' : '#3b82f6'}`
-                  }}>
+                  <div
+                    key={i}
+                    style={{
+                      background: '#1a1a1a',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginBottom: '8px',
+                      borderLeft: `3px solid ${getSeverityColor(issue.severity)}`,
+                    }}
+                  >
                     <p style={{ color: '#fff', fontSize: '13px', margin: 0 }}>{issue.message}</p>
                     {issue.suggestion && (
-                      <p style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>{issue.suggestion}</p>
+                      <p style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                        {issue.suggestion}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -330,12 +285,14 @@ const App: React.FC<AppProps> = ({ title }) => {
           </div>
         )}
 
+        {/* Tab: Write */}
         {activeTab === 'write' && (
           <div className="actions-section">
             <textarea
               value={writeInstruction}
               onChange={(e) => setWriteInstruction(e.target.value)}
               placeholder="Ex: Escreva uma introdução sobre inteligência artificial na educação..."
+              disabled={isStreaming}
               style={{
                 width: '100%',
                 minHeight: '100px',
@@ -346,30 +303,68 @@ const App: React.FC<AppProps> = ({ title }) => {
                 color: '#fff',
                 fontSize: '14px',
                 resize: 'vertical',
-                marginBottom: '12px'
+                marginBottom: '12px',
               }}
             />
-            <button
-              className="action-button primary"
-              onClick={generateText}
-              disabled={isLoading || !writeInstruction.trim()}
-            >
-              {isLoading ? '⏳ Gerando...' : '✨ Gerar Texto com IA'}
-            </button>
+
+            {/* Progress bar */}
+            {isStreaming && (
+              <div
+                style={{
+                  width: '100%',
+                  height: '4px',
+                  background: '#1a1a1a',
+                  borderRadius: '2px',
+                  marginBottom: '12px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${streamProgress}%`,
+                    height: '100%',
+                    background: '#Eebb4d',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="action-button primary"
+                onClick={generateText}
+                disabled={isLoading || isStreaming || !writeInstruction.trim()}
+                style={{ flex: 1 }}
+              >
+                {isLoading ? '⏳ Gerando...' : '✨ Gerar'}
+              </button>
+              <button
+                className="action-button secondary"
+                onClick={generateTextStreaming}
+                disabled={isLoading || isStreaming || !writeInstruction.trim()}
+                style={{ flex: 1 }}
+              >
+                {isStreaming ? '⏳ Streaming...' : '🚀 Streaming'}
+              </button>
+            </div>
           </div>
         )}
 
+        {/* Tab: Chat */}
         {activeTab === 'chat' && (
           <div className="actions-section">
             {chatResponse && (
-              <div style={{
-                background: '#1a1a1a',
-                borderRadius: '12px',
-                padding: '16px',
-                marginBottom: '12px',
-                maxHeight: '200px',
-                overflow: 'auto'
-              }}>
+              <div
+                style={{
+                  background: '#1a1a1a',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  marginBottom: '12px',
+                  maxHeight: '200px',
+                  overflow: 'auto',
+                }}
+              >
                 <p style={{ color: '#fff', fontSize: '13px', lineHeight: '1.6', margin: 0 }}>
                   {chatResponse}
                 </p>
@@ -389,7 +384,7 @@ const App: React.FC<AppProps> = ({ title }) => {
                   border: '1px solid #333',
                   background: '#1a1a1a',
                   color: '#fff',
-                  fontSize: '14px'
+                  fontSize: '14px',
                 }}
               />
               <button
@@ -402,7 +397,7 @@ const App: React.FC<AppProps> = ({ title }) => {
                   background: '#Eebb4d',
                   color: '#0a0a0a',
                   fontWeight: 600,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
                 }}
               >
                 {isLoading ? '...' : '→'}
@@ -421,8 +416,17 @@ const App: React.FC<AppProps> = ({ title }) => {
         {/* Status */}
         <div className="status-section">
           <div className="status-item">
-            <span className={`status-indicator ${backendStatus === 'online' ? 'online' : 'offline'}`}></span>
-            <span>Backend: {backendStatus === 'online' ? 'Conectado' : backendStatus === 'checking' ? 'Verificando...' : 'Desconectado'}</span>
+            <span
+              className={`status-indicator ${backendStatus === 'online' ? 'online' : 'offline'}`}
+            ></span>
+            <span>
+              Backend:{' '}
+              {backendStatus === 'online'
+                ? 'Conectado'
+                : backendStatus === 'checking'
+                ? 'Verificando...'
+                : 'Desconectado'}
+            </span>
           </div>
           <div className="status-item">
             <span className="status-indicator online"></span>
@@ -434,8 +438,7 @@ const App: React.FC<AppProps> = ({ title }) => {
       {/* Footer */}
       <footer className="app-footer">
         <p>
-          Powered by <strong>Normaex</strong> |
-          FastAPI + Gemini AI
+          Powered by <strong>Normaex</strong> | FastAPI + Gemini AI
         </p>
       </footer>
     </div>
