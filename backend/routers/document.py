@@ -14,7 +14,8 @@ from services.abnt import (
     analyze_document,
     get_document_structure,
     insert_text_at_end,
-    insert_text_after_section
+    insert_text_after_section,
+    convert_to_html
 )
 from services.ai import (
     chat_with_document,
@@ -165,6 +166,35 @@ async def download_file(filename: str):
             filename=filename
         )
     raise HTTPException(status_code=404, detail="File not found")
+
+
+@router.get("/html/{filename}")
+async def get_document_html(filename: str):
+    """
+    Retorna o conteúdo do documento como HTML para o editor.
+    """
+    # Prioriza documento em edição/processamento
+    paths_to_check = [
+        f"{PROCESSED_DIR}/edited_{filename}",
+        f"{PROCESSED_DIR}/formatted_{filename}",
+        f"{UPLOAD_DIR}/{filename}"
+    ]
+
+    file_path = None
+    for path in paths_to_check:
+        if os.path.exists(path):
+            file_path = path
+            break
+
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    try:
+        html_content = convert_to_html(file_path)
+        return {"html": html_content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao converter para HTML: {str(e)}")
+
 
 
 @router.post("/chat")

@@ -57,3 +57,47 @@ body {
 .animate-pulse-gold {
   animation: pulse-gold 2s ease-in-out infinite;
 }
+
+/* Tiptap Editor Styles */
+.tiptap p {
+    margin-bottom: 1em;
+    line-height: 1.6;
+}
+
+.tiptap h1, .tiptap h2, .tiptap h3 {
+    margin-top: 2em;
+    margin-bottom: 1em;
+    color: #000;
+}
+
+.tiptap ul, .tiptap ol {
+    padding-left: 1.5em;
+    margin-bottom: 1em;
+}
+
+.tiptap ul {
+    list-style-type: disc;
+}
+
+.tiptap ol {
+    list-style-type: decimal;
+}
+
+/* Simular quebra de página visual (apenas visual, não funcional pra impressão ainda) */
+.page-break {
+    border-bottom: 1px dashed #ccc;
+    margin: 2rem 0;
+    position: relative;
+    page-break-after: always;
+}
+
+.page-break::after {
+    content: "Quebra de Página";
+    position: absolute;
+    right: 0;
+    top: -10px;
+    font-size: 10px;
+    color: #999;
+    background: #fff;
+    padding: 0 5px;
+}

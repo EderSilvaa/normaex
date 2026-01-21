@@ -8,3 +8,4 @@ export { default as IssuesList } from './IssuesList';
 export { default as ChatPanel } from './ChatPanel';
 export { default as WritingAssistant } from './WritingAssistant';
 export { default as TabNavigation } from './TabNavigation';
+export { default as FormatControls } from './FormatControls';

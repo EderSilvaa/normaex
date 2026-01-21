@@ -415,7 +415,8 @@ async def chat(request: ChatRequest):
         context = request.context or "Documento sem conteúdo fornecido."
 
         # Usar serviço de chat existente (adaptado)
-        response = await chat_with_document(
+        # Nota: chat_with_document é síncrono, então não usamos await
+        response = chat_with_document(
             document_text=context,
             user_message=request.message
         )

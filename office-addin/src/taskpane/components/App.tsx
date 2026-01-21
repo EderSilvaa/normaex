@@ -13,8 +13,9 @@ import IssuesList from './IssuesList';
 import ChatPanel from './ChatPanel';
 import WritingAssistant from './WritingAssistant';
 import TabNavigation from './TabNavigation';
+import FormatControls from './FormatControls';
 
-type TabId = 'analysis' | 'write' | 'chat';
+type TabId = 'analysis' | 'format' | 'write' | 'chat';
 type SectionType = 'introducao' | 'desenvolvimento' | 'conclusao' | 'resumo' | 'abstract' | 'geral';
 
 interface AppProps {
@@ -35,6 +36,7 @@ const App: React.FC<AppProps> = ({ title }) => {
   // Tabs configuration
   const tabs = [
     { id: 'analysis', label: 'Analisar', icon: '📊', badge: analysis?.issues.length },
+    { id: 'format', label: 'Formatar', icon: '🎨' },
     { id: 'write', label: 'Escrever', icon: '✨' },
     { id: 'chat', label: 'Chat', icon: '💬' },
   ];
@@ -152,9 +154,25 @@ const App: React.FC<AppProps> = ({ title }) => {
   }, []);
 
   // Click na issue (navegar para localização)
-  const handleIssueClick = useCallback((issue: Issue) => {
-    console.log('Issue clicked:', issue);
-    // TODO: Implementar navegação para a localização da issue
+  const handleIssueClick = useCallback(async (issue: Issue) => {
+    if (issue.paragraph_index !== undefined && issue.paragraph_index !== null) {
+      try {
+        await DocumentService.goToParagraph(issue.paragraph_index);
+        setMessage(`Navegou para o parágrafo ${issue.paragraph_index + 1}`);
+      } catch (error) {
+        console.error('Error navigating to paragraph:', error);
+      }
+    } else if (issue.location) {
+      // Tentar buscar pelo texto da localização
+      try {
+        const found = await DocumentService.findAndSelect(issue.location.substring(0, 50));
+        if (found) {
+          setMessage('Localização encontrada');
+        }
+      } catch (error) {
+        console.error('Error finding location:', error);
+      }
+    }
   }, []);
 
   // Aplicar correção automática
@@ -163,7 +181,6 @@ const App: React.FC<AppProps> = ({ title }) => {
       try {
         await DocumentService.insertText(issue.auto_fix);
         setMessage('Correção aplicada!');
-        // Re-analisar documento
         await analyzeDocument();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -171,6 +188,71 @@ const App: React.FC<AppProps> = ({ title }) => {
       }
     }
   }, [analyzeDocument]);
+
+  // Formatação automática ABNT
+  const handleAutoFormat = useCallback(async () => {
+    setIsLoading(true);
+    setMessage('Aplicando formatação ABNT...');
+
+    try {
+      const result = await DocumentService.applyABNTFormatting();
+
+      if (result.applied.length > 0) {
+        setMessage(`Formatação aplicada: ${result.applied.join(', ')}`);
+      }
+
+      if (result.errors.length > 0) {
+        console.warn('Format errors:', result.errors);
+      }
+
+      // Re-analisar após formatação
+      if (analysis) {
+        await analyzeDocument();
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setMessage(`Erro: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [analysis, analyzeDocument]);
+
+  // Formatação de seleção
+  const handleFormatSelection = useCallback(async (options: {
+    fontName?: string;
+    fontSize?: number;
+    bold?: boolean;
+    italic?: boolean;
+    alignment?: 'left' | 'center' | 'right' | 'justified';
+  }) => {
+    try {
+      await DocumentService.formatSelection(options);
+    } catch (error) {
+      console.error('Error formatting selection:', error);
+    }
+  }, []);
+
+  // Aplicar estilo de título
+  const handleApplyHeading = useCallback(async (level: 1 | 2 | 3) => {
+    try {
+      await DocumentService.applyHeadingStyle(level);
+      setMessage(`Estilo Título ${level} aplicado`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setMessage(`Erro: ${errorMessage}`);
+    }
+  }, []);
+
+  // Aplicar citação em bloco
+  const handleApplyBlockQuote = useCallback(async () => {
+    try {
+      await DocumentService.formatAsBlockQuote();
+      setMessage('Formatação de citação aplicada');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setMessage(`Erro: ${errorMessage}`);
+    }
+  }, []);
 
   // Loading screen
   if (!isOfficeInitialized) {
@@ -214,6 +296,7 @@ const App: React.FC<AppProps> = ({ title }) => {
             activeTab={activeTab}
             onChange={(tabId) => setActiveTab(tabId as TabId)}
             variant="default"
+            size="small"
           />
         </div>
 
@@ -241,6 +324,19 @@ const App: React.FC<AppProps> = ({ title }) => {
           </div>
         )}
 
+        {/* Tab: Format */}
+        {activeTab === 'format' && (
+          <div className="actions-section">
+            <FormatControls
+              onAutoFormat={handleAutoFormat}
+              onFormatSelection={handleFormatSelection}
+              onApplyHeading={handleApplyHeading}
+              onApplyBlockQuote={handleApplyBlockQuote}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+
         {/* Tab: Write */}
         {activeTab === 'write' && (
           <div className="actions-section">
@@ -261,7 +357,7 @@ const App: React.FC<AppProps> = ({ title }) => {
               onSendMessage={handleChat}
               isLoading={isLoading}
               placeholder="Pergunte sobre seu documento..."
-              welcomeMessage="Olá! Sou o assistente Normaex. Posso ajudar com dúvidas sobre formatação ABNT, estrutura do documento ou sugestões de melhoria."
+              welcomeMessage="Olá! Sou o assistente Normaex. Posso ajudar com formatação ABNT e sugestões."
             />
           </div>
         )}

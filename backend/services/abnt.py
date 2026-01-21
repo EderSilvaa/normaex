@@ -351,6 +351,43 @@ def identify_sections(file_path: str) -> list:
     return sections
 
 
+import mammoth
+
+def convert_to_html(file_path: str) -> str:
+    """
+    Converte um arquivo DOCX para HTML usando mammoth com suporte a imagens e estilos.
+    """
+    import base64
+
+    def convert_image(image):
+        with image.open() as image_bytes:
+            encoded_src = base64.b64encode(image_bytes.read()).decode("ascii")
+        return {
+            "src": f"data:{image.content_type};base64,{encoded_src}"
+        }
+
+    style_map = """
+    p[style-name='Heading 1'] => h1:fresh
+    p[style-name='Heading 2'] => h2:fresh
+    p[style-name='Heading 3'] => h3:fresh
+    p[style-name='Title'] => h1.title:fresh
+    p[style-name='Subtitle'] => p.subtitle:fresh
+    r[style-name='Page Number'] => span.page-number
+    """
+    
+    with open(file_path, "rb") as docx_file:
+        result = mammoth.convert_to_html(
+            docx_file, 
+            style_map=style_map,
+            convert_image=mammoth.images.img_element(convert_image)
+        )
+        html = result.value
+        
+        # Tentar injetar quebras de página visuais se possível (Mammoth remove hard page breaks por padrão)
+        # O Mammoth não tem suporte nativo robusto para paginação física (já que HTML é contínuo).
+        return html
+
+
 def insert_text_after_section(file_path: str, output_path: str, section_name: str, text_to_insert: str) -> tuple:
     """
     Insere texto após uma seção específica do documento.

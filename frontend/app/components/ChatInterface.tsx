@@ -335,9 +335,9 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
                     {messages.map((msg, index) => (
                         <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                             <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${msg.role === 'user' ? 'bg-[#Eebb4d]/20'
-                                    : msg.type === 'success' ? 'bg-emerald-500/20'
-                                        : msg.type === 'write' ? 'bg-blue-500/20'
-                                            : 'bg-[#2a2a2a]'
+                                : msg.type === 'success' ? 'bg-emerald-500/20'
+                                    : msg.type === 'write' ? 'bg-blue-500/20'
+                                        : 'bg-[#2a2a2a]'
                                 }`}>
                                 {msg.role === 'user' ? <User className="w-4 h-4 text-[#Eebb4d]" />
                                     : msg.type === 'success' ? <CheckCircle className="w-4 h-4 text-emerald-400" />
@@ -345,10 +345,10 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
                                             : <Bot className="w-4 h-4 text-gray-400" />}
                             </div>
                             <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-[#Eebb4d] text-black rounded-tr-sm'
-                                    : msg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/30 text-gray-300 rounded-tl-sm'
-                                        : msg.type === 'write' ? 'bg-blue-500/10 border border-blue-500/30 text-gray-300 rounded-tl-sm'
-                                            : msg.type === 'analysis' ? 'bg-[#1a1a1a] border border-amber-500/30 text-gray-300 rounded-tl-sm'
-                                                : 'bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 rounded-tl-sm'
+                                : msg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/30 text-gray-300 rounded-tl-sm'
+                                    : msg.type === 'write' ? 'bg-blue-500/10 border border-blue-500/30 text-gray-300 rounded-tl-sm'
+                                        : msg.type === 'analysis' ? 'bg-[#1a1a1a] border border-amber-500/30 text-gray-300 rounded-tl-sm'
+                                            : 'bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 rounded-tl-sm'
                                 }`}>
                                 {formatMessageContent(msg.content)}
                                 {msg.downloadUrl && (

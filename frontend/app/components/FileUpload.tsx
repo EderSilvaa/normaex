@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { Upload, FileText, Loader2, ArrowRight, X, File, CheckCircle2 } from 'lucide-react';
-import IntegratedViewer from './IntegratedViewer';
+import Editor from './Editor/Editor';
 
 interface Issue {
   id: string;
@@ -92,12 +92,11 @@ export default function FileUpload() {
     setAnalysis(null);
   };
 
-  // Modo analisado: visualizador integrado estilo SciSpace
-  if (status === 'analyzed' && analysis) {
+  // Modo analisado: Editor Word com IA
+  if (status === 'analyzed' && uploadedFilename) {
     return (
-      <IntegratedViewer
+      <Editor
         filename={uploadedFilename}
-        analysis={analysis}
         onClose={handleReset}
       />
     );
@@ -137,9 +136,9 @@ export default function FileUpload() {
           <div className="max-w-md space-y-2">
             {!file ? (
               <>
-                <h3 className="text-2xl font-semibold text-white">Upload do Documento</h3>
+                <h3 className="text-2xl font-semibold text-white">Editor Inteligente</h3>
                 <p className="text-gray-400">
-                  Arraste e solte seu arquivo Word ou PDF aqui, ou{' '}
+                  Arraste e solte seu arquivo Word ou PDF aqui para editar com IA, ou{' '}
                   <label className="text-[#Eebb4d] hover:text-[#f5d485] cursor-pointer font-medium transition-colors">
                     selecione do computador
                     <input type="file" className="hidden" accept=".docx,.pdf" onChange={handleFileChange} />
@@ -150,7 +149,7 @@ export default function FileUpload() {
             ) : (
               <div className="animate-fade-in-up">
                 <h3 className="text-2xl font-semibold text-white mb-1">{file.name}</h3>
-                <p className="text-gray-400 text-sm">{(file.size / 1024 / 1024).toFixed(2)} MB • Pronto para análise</p>
+                <p className="text-gray-400 text-sm">{(file.size / 1024 / 1024).toFixed(2)} MB • Pronto para edição</p>
 
                 <button
                   onClick={handleReset}
@@ -175,11 +174,11 @@ export default function FileUpload() {
               {status === 'uploading' ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" strokeWidth={2} />
-                  <span>Processando...</span>
+                  <span>Preparando Editor...</span>
                 </>
               ) : (
                 <>
-                  <span>Iniciar Análise</span>
+                  <span>Abrir Editor IA</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" strokeWidth={2.5} />
                 </>
               )}
@@ -200,3 +199,4 @@ export default function FileUpload() {
     </div>
   );
 }
+

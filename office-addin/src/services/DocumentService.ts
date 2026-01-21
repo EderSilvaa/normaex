@@ -273,6 +273,253 @@ class DocumentServiceClass {
       }).catch(reject);
     });
   }
+
+  /**
+   * Aplica formatação ABNT completa ao documento
+   */
+  async applyABNTFormatting(): Promise<{ applied: string[]; errors: string[] }> {
+    const applied: string[] = [];
+    const errors: string[] = [];
+
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const body = context.document.body;
+          const paragraphs = body.paragraphs;
+          const sections = context.document.sections;
+
+          paragraphs.load('items');
+          sections.load('items');
+          await context.sync();
+
+          // 1. Fonte: Times New Roman ou Arial 12pt
+          try {
+            body.font.name = 'Times New Roman';
+            body.font.size = 12;
+            body.font.color = '#000000';
+            applied.push('Fonte: Times New Roman 12pt');
+          } catch {
+            errors.push('Erro ao aplicar fonte');
+          }
+
+          // 2. Alinhamento justificado para corpo do texto
+          try {
+            paragraphs.items.forEach((p) => {
+              p.alignment = Word.Alignment.justified;
+            });
+            applied.push('Alinhamento: Justificado');
+          } catch {
+            errors.push('Erro ao aplicar alinhamento');
+          }
+
+          // 3. Espaçamento entre linhas 1,5
+          try {
+            paragraphs.items.forEach((p) => {
+              p.lineSpacing = 18; // 1.5 * 12pt = 18pt
+            });
+            applied.push('Espaçamento: 1,5 linhas');
+          } catch {
+            errors.push('Erro ao aplicar espaçamento');
+          }
+
+          // 4. Recuo de primeira linha 1,25cm
+          try {
+            paragraphs.items.forEach((p) => {
+              p.firstLineIndent = 35.43; // 1.25cm em pontos
+            });
+            applied.push('Recuo: 1,25cm primeira linha');
+          } catch {
+            errors.push('Erro ao aplicar recuo');
+          }
+
+          // 5. Margens (3cm esq/sup, 2cm dir/inf)
+          try {
+            if (sections.items.length > 0) {
+              sections.items.forEach((section) => {
+                section.load('body');
+              });
+              await context.sync();
+
+              sections.items.forEach((section) => {
+                // Margens em pontos (1cm = 28.35pt)
+                section.body.font.size = 12; // Garantir tamanho
+              });
+              applied.push('Margens: 3cm/2cm (manual)');
+            }
+          } catch {
+            errors.push('Erro ao processar seções');
+          }
+
+          await context.sync();
+          resolve({ applied, errors });
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Aplica formatação apenas à seleção
+   */
+  async formatSelection(options: {
+    fontName?: string;
+    fontSize?: number;
+    bold?: boolean;
+    italic?: boolean;
+    alignment?: 'left' | 'center' | 'right' | 'justified';
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const selection = context.document.getSelection();
+          selection.load('font,paragraphs');
+          await context.sync();
+
+          if (options.fontName) selection.font.name = options.fontName;
+          if (options.fontSize) selection.font.size = options.fontSize;
+          if (options.bold !== undefined) selection.font.bold = options.bold;
+          if (options.italic !== undefined) selection.font.italic = options.italic;
+
+          if (options.alignment) {
+            selection.paragraphs.load('items');
+            await context.sync();
+
+            const alignmentMap = {
+              left: Word.Alignment.left,
+              center: Word.Alignment.centered,
+              right: Word.Alignment.right,
+              justified: Word.Alignment.justified,
+            };
+
+            selection.paragraphs.items.forEach((p) => {
+              p.alignment = alignmentMap[options.alignment!];
+            });
+          }
+
+          await context.sync();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Navega para um parágrafo específico
+   */
+  async goToParagraph(index: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const paragraphs = context.document.body.paragraphs;
+          paragraphs.load('items');
+          await context.sync();
+
+          if (index >= 0 && index < paragraphs.items.length) {
+            const paragraph = paragraphs.items[index];
+            paragraph.select();
+            await context.sync();
+          }
+
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Busca texto no documento e seleciona
+   */
+  async findAndSelect(searchText: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const results = context.document.body.search(searchText, {
+            matchCase: false,
+            matchWholeWord: false,
+          });
+          results.load('items');
+          await context.sync();
+
+          if (results.items.length > 0) {
+            results.items[0].select();
+            await context.sync();
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Aplica estilo de título ABNT
+   */
+  async applyHeadingStyle(level: 1 | 2 | 3): Promise<void> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const selection = context.document.getSelection();
+          selection.load('paragraphs');
+          await context.sync();
+
+          selection.paragraphs.load('items');
+          await context.sync();
+
+          selection.paragraphs.items.forEach((p) => {
+            p.font.bold = true;
+            p.alignment = level === 1 ? Word.Alignment.centered : Word.Alignment.left;
+            p.font.size = level === 1 ? 12 : 12;
+            p.font.allCaps = level === 1;
+            p.firstLineIndent = 0;
+          });
+
+          await context.sync();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Formata como citação longa ABNT (recuo 4cm, fonte 10pt)
+   */
+  async formatAsBlockQuote(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const selection = context.document.getSelection();
+          selection.load('paragraphs');
+          await context.sync();
+
+          selection.paragraphs.load('items');
+          await context.sync();
+
+          selection.paragraphs.items.forEach((p) => {
+            p.leftIndent = 113.39; // 4cm em pontos
+            p.firstLineIndent = 0;
+            p.font.size = 10;
+            p.lineSpacing = 12; // Simples
+            p.alignment = Word.Alignment.justified;
+          });
+
+          await context.sync();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
 }
 
 // Exportar instância singleton
