@@ -63,6 +63,7 @@ export interface Issue {
   location?: string | null;
   suggestion?: string | null;
   paragraph_index?: number | null;
+  auto_fix?: string | null;
 }
 
 export interface AnalysisResponse {

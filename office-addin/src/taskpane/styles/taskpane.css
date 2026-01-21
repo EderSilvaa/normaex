@@ -313,3 +313,126 @@ body {
 .app-main::-webkit-scrollbar-thumb:hover {
   background: #3a3a3a;
 }
+
+/* ===================================
+   RESPONSIVE STYLES
+   =================================== */
+
+/* Task pane padrão (300-350px de largura) */
+@media screen and (max-width: 400px) {
+  body {
+    font-size: 13px;
+  }
+
+  .app-header {
+    padding: 16px 12px;
+  }
+
+  .logo-container h1 {
+    font-size: 18px;
+  }
+
+  .version {
+    font-size: 9px;
+    padding: 2px 8px;
+  }
+
+  .tagline {
+    font-size: 11px;
+  }
+
+  .app-main {
+    padding: 16px 12px;
+  }
+
+  .welcome-card {
+    padding: 16px;
+    border-radius: 16px;
+    margin-bottom: 16px;
+  }
+
+  .action-button {
+    padding: 12px 16px;
+    font-size: 13px;
+    border-radius: 12px;
+  }
+
+  .status-section {
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+
+  .app-footer {
+    padding: 12px;
+    font-size: 10px;
+  }
+}
+
+/* Task pane muito estreito (Word Online) */
+@media screen and (max-width: 320px) {
+  .app-header {
+    padding: 12px 10px;
+  }
+
+  .logo-container h1 {
+    font-size: 16px;
+  }
+
+  .tagline {
+    font-size: 10px;
+  }
+
+  .app-main {
+    padding: 12px 10px;
+  }
+
+  .welcome-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .action-button {
+    padding: 10px 12px;
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .message-box {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .status-item {
+    font-size: 11px;
+  }
+}
+
+/* Altura muito pequena */
+@media screen and (max-height: 500px) {
+  .app-header {
+    padding: 12px;
+  }
+
+  .app-main {
+    padding: 12px;
+  }
+
+  .welcome-card {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .action-button {
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+
+  .status-section {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+
+  .app-footer {
+    padding: 10px;
+  }
+}
