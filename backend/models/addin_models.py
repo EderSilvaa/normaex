@@ -53,12 +53,28 @@ class ParagraphData(BaseModel):
     is_italic: Optional[bool] = Field(False, description="Se o texto está em itálico")
 
 
+class PageMargins(BaseModel):
+    """Margens da página em centímetros"""
+    top_cm: float = Field(default=3.0, description="Margem superior em cm")
+    bottom_cm: float = Field(default=2.0, description="Margem inferior em cm")
+    left_cm: float = Field(default=3.0, description="Margem esquerda em cm")
+    right_cm: float = Field(default=2.0, description="Margem direita em cm")
+
+
+class PageSetup(BaseModel):
+    """Configurações de página do documento"""
+    margins: PageMargins = Field(default_factory=PageMargins, description="Margens da página")
+    page_size: str = Field(default="A4", description="Tamanho da página")
+    orientation: str = Field(default="portrait", description="Orientação: portrait ou landscape")
+
+
 class DocumentContent(BaseModel):
     """Conteúdo completo do documento enviado pelo Add-in"""
     paragraphs: List[ParagraphData] = Field(..., description="Lista de parágrafos do documento")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Metadados do documento")
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação desejada")
     full_text: Optional[str] = Field(None, description="Texto completo concatenado")
+    page_setup: Optional[PageSetup] = Field(None, description="Configurações de página (margens, tamanho)")
 
 
 class SelectionContent(BaseModel):
@@ -147,12 +163,23 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="Mensagem do usuário")
     context: Optional[str] = Field(None, description="Contexto do documento (texto selecionado ou documento completo)")
     history: Optional[List[Dict[str, str]]] = Field(default_factory=list, description="Histórico de mensagens")
+    project_id: Optional[str] = Field(None, description="ID do projeto para incluir contexto de PDFs")
+
+
+class ContextInfo(BaseModel):
+    """Informações sobre o contexto de PDFs usado na resposta"""
+    has_pdf_context: bool = Field(False, description="Se há contexto de PDFs sendo usado")
+    project_name: Optional[str] = Field(None, description="Nome do projeto")
+    pdf_count: int = Field(0, description="Número de PDFs usados como contexto")
+    pdf_names: List[str] = Field(default_factory=list, description="Nomes dos PDFs")
+    total_words: int = Field(0, description="Total de palavras nos PDFs")
 
 
 class ChatResponse(BaseModel):
     """Resposta do chat"""
     message: str = Field(..., description="Resposta da IA")
     suggestions: Optional[List[str]] = Field(None, description="Sugestões de perguntas relacionadas")
+    context_info: Optional[ContextInfo] = Field(None, description="Info sobre contexto de PDFs usado")
 
 
 # ============================================

@@ -68,17 +68,18 @@ def analyze_document(file_path: str) -> dict:
         # Fallback para análise básica se IA falhar
 
     # === ANÁLISE BÁSICA (SEMPRE EXECUTADA) ===
-    # Verificar margens (SEM DUPLICAR)
+    # Verificar margens (SEM DUPLICAR) - com tolerância de 0.1cm
     section = doc.sections[0]  # Apenas primeira seção
     margin_issues = []
+    TOLERANCE = 0.1  # Tolerância em cm para evitar falsos positivos
 
-    if section.top_margin != Cm(3):
+    if abs(section.top_margin.cm - 3) > TOLERANCE:
         margin_issues.append(f"Superior: {section.top_margin.cm:.1f}cm (esperado: 3cm)")
-    if section.left_margin != Cm(3):
+    if abs(section.left_margin.cm - 3) > TOLERANCE:
         margin_issues.append(f"Esquerda: {section.left_margin.cm:.1f}cm (esperado: 3cm)")
-    if section.bottom_margin != Cm(2):
+    if abs(section.bottom_margin.cm - 2) > TOLERANCE:
         margin_issues.append(f"Inferior: {section.bottom_margin.cm:.1f}cm (esperado: 2cm)")
-    if section.right_margin != Cm(2):
+    if abs(section.right_margin.cm - 2) > TOLERANCE:
         margin_issues.append(f"Direita: {section.right_margin.cm:.1f}cm (esperado: 2cm)")
 
     if margin_issues:
@@ -93,12 +94,12 @@ def analyze_document(file_path: str) -> dict:
     style = doc.styles['Normal']
     font = style.font
 
-    if font.name and font.name != 'Arial':
+    if font.name and font.name not in ['Times New Roman', 'Arial']:
         issues.append({
             "id": "font_family",
             "category": "Fonte",
-            "description": f"Fonte padrão '{font.name}' não é Arial",
-            "expected": "Arial",
+            "description": f"Fonte padrão '{font.name}' não é Times New Roman ou Arial",
+            "expected": "Times New Roman ou Arial",
             "severity": "medium"
         })
 
@@ -141,11 +142,11 @@ def analyze_document(file_path: str) -> dict:
 
         # Verificar formatação manual nos runs
         for run_idx, run in enumerate(paragraph.runs):
-            if run.font.name and run.font.name != 'Arial':
+            if run.font.name and run.font.name not in ['Times New Roman', 'Arial']:
                 wrong_runs_details.append({
                     "paragraph": para_num,
                     "run": run_idx + 1,
-                    "issue": f"Fonte '{run.font.name}' ao invés de Arial",
+                    "issue": f"Fonte '{run.font.name}' ao invés de Times New Roman ou Arial",
                     "text_preview": run.text[:30] + "..." if len(run.text) > 30 else run.text
                 })
             elif run.font.size and run.font.size != Pt(12):
@@ -202,14 +203,24 @@ def analyze_document(file_path: str) -> dict:
             "severity": "medium"
         })
 
-    # Verificar referências
+    # Verificar referências - conta apenas até encontrar próxima seção ou anexos
     has_references = False
     ref_count = 0
+    next_section_keywords = ['anexo', 'apêndice', 'apendice', 'glossário', 'glossario', 'índice', 'indice']
+
     for i, p in enumerate(doc.paragraphs):
         if p.text.lower().strip() in ['referências', 'referencias', 'bibliografia']:
             has_references = True
             for j in range(i + 1, len(doc.paragraphs)):
-                if doc.paragraphs[j].text.strip():
+                para_text = doc.paragraphs[j].text.strip()
+                para_lower = para_text.lower()
+
+                # Parar se encontrar próxima seção
+                if any(keyword in para_lower for keyword in next_section_keywords):
+                    break
+
+                # Contar apenas parágrafos que parecem referências (começam com letra/número ou têm autor)
+                if para_text and (para_text[0].isupper() or para_text[0].isdigit()):
                     ref_count += 1
             break
 
@@ -258,9 +269,9 @@ def format_abnt(file_path: str, output_path: str):
     style = doc.styles['Normal']
     font = style.font
 
-    if font.name != 'Arial':
+    if font.name != 'Times New Roman':
         changes.append("Fonte padrão alterada para Arial.")
-    font.name = 'Arial'
+    font.name = 'Times New Roman'
 
     if font.size != Pt(12):
         changes.append("Tamanho da fonte ajustado para 12pt.")
@@ -283,8 +294,8 @@ def format_abnt(file_path: str, output_path: str):
             count_fixed += 1
 
         for run in paragraph.runs:
-            if run.font.name != 'Arial' or run.font.size != Pt(12):
-                run.font.name = 'Arial'
+            if run.font.name != 'Times New Roman' or run.font.size != Pt(12):
+                run.font.name = 'Times New Roman'
                 run.font.size = Pt(12)
                 count_runs_fixed += 1
 
@@ -436,7 +447,7 @@ def insert_text_after_section(file_path: str, output_path: str, section_name: st
             new_para.paragraph_format.first_line_indent = Cm(1.25)
 
             for run in new_para.runs:
-                run.font.name = 'Arial'
+                run.font.name = 'Times New Roman'
                 run.font.size = Pt(12)
 
             # Mover para a posição correta
@@ -475,7 +486,7 @@ def insert_text_at_end(file_path: str, output_path: str, text_to_insert: str) ->
             new_para.paragraph_format.first_line_indent = Cm(1.25)
 
             for run in new_para.runs:
-                run.font.name = 'Arial'
+                run.font.name = 'Times New Roman'
                 run.font.size = Pt(12)
 
     doc.save(output_path)

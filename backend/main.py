@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import document
 from routers import addin
+from routers import projects
 
 app = FastAPI(
     title="Normaex API",
@@ -20,6 +21,7 @@ app.add_middleware(
 # Routers
 app.include_router(document.router, prefix="/api/documents", tags=["documents"])
 app.include_router(addin.router, prefix="/api", tags=["addin"])
+app.include_router(projects.router, tags=["projects"])
 
 @app.get("/")
 def read_root():

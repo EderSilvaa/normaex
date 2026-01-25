@@ -19,3 +19,17 @@ from .addin_models import (
     ValidationMessage,
     ValidationResult
 )
+
+from .project_models import (
+    PDFStatus,
+    PDFDocument,
+    PDFSummary,
+    Project,
+    ProjectSummary,
+    CreateProjectRequest,
+    UpdateProjectRequest,
+    ProjectResponse,
+    ProjectListResponse,
+    PDFUploadResponse,
+    ProjectContextResponse
+)

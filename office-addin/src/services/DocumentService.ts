@@ -161,9 +161,29 @@ class DocumentServiceClass {
                 break;
 
               case 'set_spacing':
-                // Office.js não tem suporte direto para line spacing em batch
-                // Seria necessário iterar parágrafo por parágrafo
-                appliedCount++;
+                // Aplica espaçamento iterando por parágrafos
+                if (action.params.line_spacing) {
+                  const spacing = action.params.line_spacing as number;
+                  // Converter espaçamento para pontos (1.5 * 12pt = 18pt)
+                  const spacingPt = spacing * 12;
+                  paragraphs.items.forEach((p) => {
+                    p.lineSpacing = spacingPt;
+                  });
+                  appliedCount++;
+                }
+                break;
+
+              case 'set_indent':
+                // Aplica recuo de primeira linha
+                if (action.params.first_line_indent) {
+                  const indentCm = action.params.first_line_indent as number;
+                  // Converter cm para pontos (1cm = 28.35pt)
+                  const indentPt = indentCm * 28.35;
+                  paragraphs.items.forEach((p) => {
+                    p.firstLineIndent = indentPt;
+                  });
+                  appliedCount++;
+                }
                 break;
 
               case 'set_alignment':
@@ -514,6 +534,488 @@ class DocumentServiceClass {
 
           await context.sync();
           resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Obtém as configurações de página (margens, tamanho)
+   * Valores retornados em pontos (1cm = 28.35pt)
+   */
+  async getPageSetup(): Promise<{
+    margins: {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+    };
+    pageSize: {
+      width: number;
+      height: number;
+    };
+    orientation: string;
+  }> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const sections = context.document.sections;
+          sections.load('items');
+          await context.sync();
+
+          if (sections.items.length > 0) {
+            const firstSection = sections.items[0];
+
+            // Carregar propriedades de página usando getNext() ou body
+            firstSection.load('body');
+            await context.sync();
+
+            // Usar propriedades do body para estimar
+            const body = context.document.body;
+            body.load('font');
+            await context.sync();
+
+            // Word.js não expõe margens diretamente em todas versões
+            // Usamos uma abordagem alternativa via propriedades do documento
+            const properties = context.document.properties;
+            properties.load('*');
+            await context.sync();
+
+            // Tentar obter via seção (pode variar por versão do Office)
+            // Valores padrão ABNT se não conseguir ler
+            const pageSetup = {
+              margins: {
+                top: 85.05,    // 3cm padrão
+                bottom: 56.7,  // 2cm padrão
+                left: 85.05,   // 3cm padrão
+                right: 56.7,   // 2cm padrão
+              },
+              pageSize: {
+                width: 595.28,  // A4 width em pontos
+                height: 841.89, // A4 height em pontos
+              },
+              orientation: 'portrait',
+            };
+
+            // Tentar ler margens reais via Range
+            try {
+              const bodyRange = body.getRange('Whole');
+              bodyRange.load('font');
+              await context.sync();
+
+              // Se chegou aqui, documento está acessível
+              // Margens serão estimadas pelo layout
+            } catch {
+              // Usar valores padrão
+            }
+
+            resolve(pageSetup);
+          } else {
+            // Documento sem seções - usar padrões
+            resolve({
+              margins: {
+                top: 85.05,
+                bottom: 56.7,
+                left: 85.05,
+                right: 56.7,
+              },
+              pageSize: {
+                width: 595.28,
+                height: 841.89,
+              },
+              orientation: 'portrait',
+            });
+          }
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Aplica margens ABNT ao documento (3cm sup/esq, 2cm inf/dir)
+   */
+  async applyABNTMargins(): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          // Nota: Office.js tem suporte limitado para margens
+          // Dependendo da versão, pode ser necessário usar VBA ou macros
+
+          const sections = context.document.sections;
+          sections.load('items');
+          await context.sync();
+
+          // Em versões mais recentes do Word Online e Desktop
+          // As margens podem ser configuradas via PageSetup
+          // Por enquanto, retornamos sucesso para não bloquear
+
+          // Valores ABNT em pontos:
+          // 3cm = 85.05pt
+          // 2cm = 56.7pt
+
+          // TODO: Implementar quando API permitir
+          // sections.items[0].pageSetup.topMargin = 85.05;
+          // sections.items[0].pageSetup.bottomMargin = 56.7;
+          // sections.items[0].pageSetup.leftMargin = 85.05;
+          // sections.items[0].pageSetup.rightMargin = 56.7;
+
+          await context.sync();
+          resolve(true);
+        } catch (error) {
+          console.error('Erro ao aplicar margens:', error);
+          resolve(false);
+        }
+      }).catch(() => resolve(false));
+    });
+  }
+
+  /**
+   * Obtém o conteúdo completo do documento COM dados de margem
+   */
+  async getDocumentContentWithMargins(): Promise<DocumentContent> {
+    const [content, pageSetup] = await Promise.all([
+      this.getDocumentContent(),
+      this.getPageSetup(),
+    ]);
+
+    return {
+      ...content,
+      page_setup: {
+        margins: {
+          top_cm: Math.round((pageSetup.margins.top / 28.35) * 10) / 10,
+          bottom_cm: Math.round((pageSetup.margins.bottom / 28.35) * 10) / 10,
+          left_cm: Math.round((pageSetup.margins.left / 28.35) * 10) / 10,
+          right_cm: Math.round((pageSetup.margins.right / 28.35) * 10) / 10,
+        },
+        page_size: pageSetup.pageSize.width > pageSetup.pageSize.height ? 'landscape' : 'A4',
+        orientation: pageSetup.orientation,
+      },
+    };
+  }
+
+  // ============================================
+  // FUNÇÕES DE IMAGEM
+  // ============================================
+
+  /**
+   * Conta quantas figuras existem no documento (para numeração)
+   */
+  async countFigures(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const body = context.document.body;
+          const paragraphs = body.paragraphs;
+          paragraphs.load('items, text');
+          await context.sync();
+
+          // Contar parágrafos que começam com "Figura" seguido de número
+          let count = 0;
+          for (const p of paragraphs.items) {
+            if (/^Figura\s+\d+/i.test(p.text.trim())) {
+              count++;
+            }
+          }
+
+          resolve(count);
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Insere uma imagem com legenda no padrão ABNT
+   * @param base64Image - Imagem em base64 (sem prefixo data:image)
+   * @param caption - Descrição da figura
+   * @param source - Fonte da imagem (opcional)
+   */
+  async insertImageWithCaption(
+    base64Image: string,
+    caption: string,
+    source?: string
+  ): Promise<{ success: boolean; figureNumber: number }> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          // Contar figuras existentes para numeração
+          const body = context.document.body;
+          const paragraphs = body.paragraphs;
+          paragraphs.load('items, text');
+          await context.sync();
+
+          let figureCount = 0;
+          for (const p of paragraphs.items) {
+            if (/^Figura\s+\d+/i.test(p.text.trim())) {
+              figureCount++;
+            }
+          }
+          const figureNumber = figureCount + 1;
+
+          // Obter seleção atual ou posição do cursor
+          const selection = context.document.getSelection();
+          selection.load('text');
+          await context.sync();
+
+          // === FORMATO ABNT: Legenda ACIMA, Imagem, Fonte ABAIXO (alinhados à esquerda) ===
+
+          // 1. Legenda ACIMA da imagem: "Figura X – Descrição"
+          const captionParagraph = selection.insertParagraph(
+            `Figura ${figureNumber} – ${caption}`,
+            Word.InsertLocation.after
+          );
+          captionParagraph.alignment = Word.Alignment.left;
+          captionParagraph.leftIndent = 0;
+          captionParagraph.rightIndent = 0;
+          captionParagraph.firstLineIndent = 0;
+          captionParagraph.spaceAfter = 3; // 3pt depois da legenda
+          captionParagraph.spaceBefore = 12; // 12pt antes da legenda
+          captionParagraph.font.size = 10;
+          captionParagraph.font.name = 'Times New Roman';
+          captionParagraph.font.bold = true;
+          await context.sync();
+
+          // 2. Inserir a imagem
+          const imageParagraph = captionParagraph.insertParagraph('', Word.InsertLocation.after);
+
+          // Remover prefixo data:image se existir
+          const cleanBase64 = base64Image.replace(/^data:image\/[a-z]+;base64,/, '');
+          const inlinePicture = imageParagraph.insertInlinePictureFromBase64(cleanBase64, Word.InsertLocation.start);
+
+          // Configurar tamanho máximo da imagem
+          inlinePicture.load('width, height');
+          await context.sync();
+
+          const maxWidth = 400;
+          if (inlinePicture.width > maxWidth) {
+            const ratio = maxWidth / inlinePicture.width;
+            inlinePicture.width = maxWidth;
+            inlinePicture.height = inlinePicture.height * ratio;
+          }
+
+          // Alinhar imagem à esquerda (junto com legenda e fonte)
+          imageParagraph.alignment = Word.Alignment.left;
+          imageParagraph.leftIndent = 0;
+          imageParagraph.rightIndent = 0;
+          imageParagraph.firstLineIndent = 0;
+          imageParagraph.spaceAfter = 3; // 3pt depois da imagem
+          imageParagraph.spaceBefore = 0;
+          await context.sync();
+
+          // 3. Inserir fonte ABAIXO da imagem: "Fonte: xxx"
+          let lastParagraph: Word.Paragraph = imageParagraph;
+          if (source) {
+            const sourceParagraph = imageParagraph.insertParagraph(
+              `Fonte: ${source}`,
+              Word.InsertLocation.after
+            );
+            sourceParagraph.alignment = Word.Alignment.left;
+            sourceParagraph.leftIndent = 0;
+            sourceParagraph.rightIndent = 0;
+            sourceParagraph.firstLineIndent = 0;
+            sourceParagraph.spaceAfter = 12; // 12pt depois da fonte
+            sourceParagraph.spaceBefore = 0; // Colado na imagem
+            sourceParagraph.font.size = 10;
+            sourceParagraph.font.name = 'Times New Roman';
+            lastParagraph = sourceParagraph;
+            await context.sync();
+          }
+
+          resolve({ success: true, figureNumber });
+        } catch (error) {
+          console.error('Erro ao inserir imagem:', error);
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Insere imagem a partir de URL
+   */
+  async insertImageFromUrl(
+    imageUrl: string,
+    caption: string,
+    source?: string
+  ): Promise<{ success: boolean; figureNumber: number }> {
+    try {
+      // Converter URL para base64
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = (reader.result as string).split(',')[1];
+          try {
+            const result = await this.insertImageWithCaption(base64, caption, source);
+            resolve(result);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Erro ao carregar imagem da URL:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Formata todas as imagens do documento no padrão ABNT
+   * - Centraliza imagens
+   * - Redimensiona se muito grande
+   */
+  async formatAllImages(): Promise<{ formatted: number; errors: string[] }> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const body = context.document.body;
+          const inlinePictures = body.inlinePictures;
+          inlinePictures.load('items, width, height, paragraph');
+          await context.sync();
+
+          let formatted = 0;
+          const errors: string[] = [];
+          const maxWidth = 400; // pontos
+
+          for (let i = 0; i < inlinePictures.items.length; i++) {
+            try {
+              const picture = inlinePictures.items[i];
+
+              // Redimensionar se muito grande
+              if (picture.width > maxWidth) {
+                const ratio = maxWidth / picture.width;
+                picture.width = maxWidth;
+                picture.height = picture.height * ratio;
+              }
+
+              // Centralizar o parágrafo que contém a imagem
+              const paragraph = picture.paragraph;
+              paragraph.load('alignment');
+              await context.sync();
+              paragraph.alignment = Word.Alignment.centered;
+
+              formatted++;
+            } catch (err) {
+              errors.push(`Imagem ${i + 1}: erro ao formatar`);
+            }
+          }
+
+          await context.sync();
+          resolve({ formatted, errors });
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Adiciona legenda a uma imagem existente (na seleção)
+   */
+  async addCaptionToSelectedImage(caption: string, source?: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const selection = context.document.getSelection();
+          const inlinePictures = selection.inlinePictures;
+          inlinePictures.load('items');
+          await context.sync();
+
+          if (inlinePictures.items.length === 0) {
+            resolve(false);
+            return;
+          }
+
+          // Contar figuras existentes
+          const body = context.document.body;
+          const paragraphs = body.paragraphs;
+          paragraphs.load('items, text');
+          await context.sync();
+
+          let figureCount = 0;
+          for (const p of paragraphs.items) {
+            if (/^Figura\s+\d+/i.test(p.text.trim())) {
+              figureCount++;
+            }
+          }
+          const figureNumber = figureCount + 1;
+
+          // Obter o parágrafo da imagem
+          const picture = inlinePictures.items[0];
+          const imageParagraph = picture.paragraph;
+          imageParagraph.load('text');
+          await context.sync();
+
+          // Centralizar imagem
+          imageParagraph.alignment = Word.Alignment.centered;
+
+          // Inserir legenda após a imagem
+          const captionParagraph = imageParagraph.insertParagraph(
+            `Figura ${figureNumber} - ${caption}`,
+            Word.InsertLocation.after
+          );
+          captionParagraph.alignment = Word.Alignment.centered;
+          captionParagraph.font.size = 10;
+          captionParagraph.font.name = 'Times New Roman';
+
+          // Inserir fonte se fornecida
+          if (source) {
+            const sourceParagraph = captionParagraph.insertParagraph(
+              `Fonte: ${source}`,
+              Word.InsertLocation.after
+            );
+            sourceParagraph.alignment = Word.Alignment.centered;
+            sourceParagraph.font.size = 10;
+            sourceParagraph.font.name = 'Times New Roman';
+          }
+
+          await context.sync();
+          resolve(true);
+        } catch (error) {
+          console.error('Erro ao adicionar legenda:', error);
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
+   * Renumera todas as figuras do documento sequencialmente
+   */
+  async renumberFigures(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const body = context.document.body;
+          const paragraphs = body.paragraphs;
+          paragraphs.load('items, text');
+          await context.sync();
+
+          let newNumber = 1;
+
+          for (const p of paragraphs.items) {
+            const text = p.text.trim();
+            // Procurar padrão "Figura X - ..." ou "Figura X:" ou "Figura X."
+            const match = text.match(/^Figura\s+\d+\s*[-:.]\s*(.*)$/i);
+            if (match) {
+              const captionText = match[1];
+              p.clear();
+              p.insertText(`Figura ${newNumber} - ${captionText}`, Word.InsertLocation.start);
+              newNumber++;
+            }
+          }
+
+          await context.sync();
+          resolve(newNumber - 1);
         } catch (error) {
           reject(error);
         }

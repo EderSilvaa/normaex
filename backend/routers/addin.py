@@ -4,7 +4,9 @@ Esses endpoints recebem conteúdo JSON diretamente (não arquivos)
 """
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+import httpx
+import base64
 from sse_starlette.sse import EventSourceResponse
 from typing import AsyncGenerator
 import json
@@ -23,6 +25,7 @@ from models.addin_models import (
     WriteResponse,
     ChatRequest,
     ChatResponse,
+    ContextInfo,
     ImproveRequest,
     ImproveResponse
 )
@@ -34,6 +37,7 @@ from services.ai import (
 )
 from services.ai_structural import analyze_document_with_ai
 from services.ai_writer import write_structured_streaming
+from services.project_service import project_service
 
 router = APIRouter(prefix="/addin", tags=["Office Add-in"])
 
@@ -135,7 +139,7 @@ async def analyze_content(content: DocumentContent):
             # Verificar fonte (apenas para texto normal, não títulos/notas)
             if para.font_name and not is_heading and not is_title:
                 font_lower = para.font_name.lower()
-                if font_lower not in ["times new roman", "arial", "calibri"]:
+                if font_lower not in ["times new roman", "arial"]:
                     font_issues["wrong_font"].append({
                         "index": i,
                         "font": para.font_name,
@@ -209,10 +213,10 @@ async def analyze_content(content: DocumentContent):
 
         if alignment_issues:
             count = len(alignment_issues)
-            if count > 2:  # Só reportar se houver mais de 2 parágrafos
+            if count >= 1:  # Reportar qualquer parágrafo não justificado
                 issues.append(Issue(
                     code="ABNT_004",
-                    message=f"{count} parágrafos não estão justificados",
+                    message=f"{count} parágrafo(s) não está(ão) justificado(s)",
                     severity=IssueSeverity.INFO,
                     paragraph_index=alignment_issues[0]["index"],
                     suggestion="Aplique alinhamento justificado ao corpo do texto"
@@ -231,7 +235,40 @@ async def analyze_content(content: DocumentContent):
             ))
             score -= min(count, 5)
 
-        # 3. Verificar estrutura básica
+        # 3. Verificar margens do documento (ABNT: 3cm sup/esq, 2cm inf/dir)
+        if content.page_setup and content.page_setup.margins:
+            margins = content.page_setup.margins
+            margin_issues = []
+
+            # Tolerância de 0.3cm para variações
+            tolerance = 0.3
+
+            # Verificar margem superior (deve ser 3cm)
+            if abs(margins.top_cm - 3.0) > tolerance:
+                margin_issues.append(f"superior ({margins.top_cm}cm, deveria ser 3cm)")
+
+            # Verificar margem inferior (deve ser 2cm)
+            if abs(margins.bottom_cm - 2.0) > tolerance:
+                margin_issues.append(f"inferior ({margins.bottom_cm}cm, deveria ser 2cm)")
+
+            # Verificar margem esquerda (deve ser 3cm)
+            if abs(margins.left_cm - 3.0) > tolerance:
+                margin_issues.append(f"esquerda ({margins.left_cm}cm, deveria ser 3cm)")
+
+            # Verificar margem direita (deve ser 2cm)
+            if abs(margins.right_cm - 2.0) > tolerance:
+                margin_issues.append(f"direita ({margins.right_cm}cm, deveria ser 2cm)")
+
+            if margin_issues:
+                issues.append(Issue(
+                    code="ABNT_006",
+                    message=f"Margens fora do padrão ABNT: {', '.join(margin_issues[:2])}{'...' if len(margin_issues) > 2 else ''}",
+                    severity=IssueSeverity.WARNING,
+                    suggestion="Configure as margens: 3cm (superior/esquerda) e 2cm (inferior/direita)"
+                ))
+                score -= min(len(margin_issues) * 3, 10)
+
+        # 4. Verificar estrutura básica
         text_lower = full_text.lower()
 
         has_intro = any(term in text_lower for term in ["introdução", "introducao", "1. introdução", "1 introdução"])
@@ -491,38 +528,155 @@ async def write_text(request: WriteRequest):
 
 
 # ============================================
-# CHAT
+# CHAT (com detecção de escrita integrada)
 # ============================================
+
+def detect_write_intent(message: str) -> tuple[bool, str, str]:
+    """
+    Detecta se o usuário quer gerar texto e extrai a instrução.
+    Retorna: (is_write_intent, instruction, section_type)
+    """
+    message_lower = message.lower().strip()
+
+    # Padrões que indicam intenção de escrita
+    write_patterns = [
+        "escreva", "escrever", "crie", "criar", "gere", "gerar",
+        "redija", "redigir", "elabore", "elaborar", "produza", "produzir",
+        "faça um texto", "faça uma", "faça um parágrafo",
+        "desenvolva", "desenvolver", "componha", "compor",
+        "me ajude a escrever", "preciso escrever", "quero escrever"
+    ]
+
+    is_write = any(pattern in message_lower for pattern in write_patterns)
+
+    if not is_write:
+        return False, "", "geral"
+
+    # Detectar tipo de seção
+    section_type = "geral"
+    if any(term in message_lower for term in ["introdução", "introducao", "intro"]):
+        section_type = "introducao"
+    elif any(term in message_lower for term in ["conclusão", "conclusao", "considerações finais"]):
+        section_type = "conclusao"
+    elif any(term in message_lower for term in ["metodologia", "método", "metodo"]):
+        section_type = "metodologia"
+    elif any(term in message_lower for term in ["resultado", "análise", "analise"]):
+        section_type = "resultados"
+    elif any(term in message_lower for term in ["resumo", "abstract"]):
+        section_type = "resumo"
+    elif any(term in message_lower for term in ["desenvolvimento", "corpo"]):
+        section_type = "desenvolvimento"
+    elif any(term in message_lower for term in ["referência", "referencia", "bibliografia"]):
+        section_type = "referencias"
+
+    return True, message, section_type
+
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
     Chat contextualizado com o documento.
+    Detecta automaticamente quando o usuário quer gerar texto.
 
     - Recebe mensagem do usuário e contexto do documento
-    - Retorna resposta da IA com conhecimento do documento
+    - Se project_id fornecido, inclui contexto dos PDFs do projeto
+    - Se detectar intenção de escrita, gera o texto
+    - Caso contrário, responde como assistente
     """
     try:
-        # Construir contexto para a IA
         context = request.context or "Documento sem conteúdo fornecido."
+        has_pdf_context = False
+        pdf_info = None
+        context_info = None
 
-        # Usar serviço de chat existente (adaptado)
-        # Nota: chat_with_document é síncrono, então não usamos await
-        response = chat_with_document(
-            document_text=context,
-            user_message=request.message
-        )
+        # Incluir contexto do projeto (PDFs) se fornecido
+        if request.project_id:
+            pdf_info = project_service.get_project_context_info(request.project_id)
+            project_context = project_service.get_project_context(request.project_id, max_chars=30000)
+            if project_context and pdf_info:
+                has_pdf_context = True
+                # Construir info de contexto para retornar ao frontend
+                context_info = ContextInfo(
+                    has_pdf_context=True,
+                    project_name=pdf_info.get('project_name'),
+                    pdf_count=pdf_info.get('pdf_count', 0),
+                    pdf_names=pdf_info.get('pdf_names', []),
+                    total_words=pdf_info.get('total_words', 0)
+                )
+                context = f"""=== DOCUMENTOS DE REFERÊNCIA DO PROJETO "{pdf_info.get('project_name', 'Projeto')}" ===
+Você tem acesso aos seguintes documentos para usar como base e referência:
+{', '.join(pdf_info.get('pdf_names', []))}
 
-        # Gerar sugestões de perguntas relacionadas
-        suggestions = [
-            "Como posso melhorar este texto?",
-            "O que está faltando no documento?",
-            "Verifique se há erros de formatação"
-        ]
+CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
+{project_context}
+
+=== DOCUMENTO ATUAL DO USUÁRIO (Word) ===
+{request.context or 'Nenhum conteúdo do documento atual.'}
+
+=== INSTRUÇÕES ===
+1. Use os documentos de referência como base para suas respostas
+2. Você pode citar, parafrasear, expandir ou basear suas respostas no conteúdo desses documentos
+3. Quando o usuário pedir para escrever algo, use as informações dos documentos como fonte
+4. Mantenha coerência com o estilo e tema dos documentos anexados
+5. Se o usuário perguntar sobre algo específico dos documentos, busque a informação relevante"""
+
+        # Detectar se é uma solicitação de escrita
+        is_write, instruction, section_type = detect_write_intent(request.message)
+
+        if is_write:
+            # Modo de escrita: gerar texto acadêmico usando contexto expandido
+            # Usar mais contexto quando há PDFs de referência
+            context_limit = 20000 if has_pdf_context else 2000
+            generated_text = generate_academic_text(
+                document_context=context[:context_limit],
+                instruction=instruction,
+                section_type=section_type
+            )
+
+            word_count = len(generated_text.split())
+
+            # Resposta formatada com indicação de que usou os documentos
+            docs_note = ""
+            if has_pdf_context and pdf_info:
+                docs_note = f"\n📚 *Baseado em {pdf_info.get('pdf_count', 0)} documento(s) de referência*\n"
+
+            response = f"""📝 **Texto gerado ({word_count} palavras):**
+{docs_note}
+{generated_text}
+
+---
+💡 *Para inserir no documento, copie o texto acima ou peça ajustes.*"""
+
+            suggestions = [
+                "Expandir este texto",
+                "Reescrever de forma mais formal",
+                "Adicionar mais detalhes"
+            ]
+        else:
+            # Modo chat normal
+            response = chat_with_document(
+                document_text=context,
+                user_message=request.message
+            )
+
+            # Sugestões contextualizadas
+            if has_pdf_context:
+                suggestions = [
+                    "Escreva uma introdução baseada nos documentos",
+                    "Resuma os documentos anexados",
+                    "Use os PDFs para criar um tópico"
+                ]
+            else:
+                suggestions = [
+                    "Escreva uma introdução",
+                    "Como melhorar a estrutura?",
+                    "Verifique a formatação ABNT"
+                ]
 
         return ChatResponse(
             message=response,
-            suggestions=suggestions
+            suggestions=suggestions,
+            context_info=context_info
         )
 
     except Exception as e:
@@ -583,3 +737,35 @@ async def health_check():
         "service": "normaex-addin",
         "version": "1.0.0"
     }
+
+
+# ============================================
+# IMAGE PROXY (para evitar CORS)
+# ============================================
+
+@router.get("/image-proxy")
+async def image_proxy(url: str):
+    """
+    Proxy para buscar imagens externas e retornar em base64.
+    Necessário para evitar problemas de CORS no Office Add-in.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+
+            content_type = response.headers.get('content-type', 'image/jpeg')
+            image_data = response.content
+            base64_data = base64.b64encode(image_data).decode('utf-8')
+
+            return {
+                "success": True,
+                "base64": base64_data,
+                "content_type": content_type
+            }
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Timeout ao buscar imagem")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail="Erro ao buscar imagem")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro no proxy de imagem: {str(e)}")

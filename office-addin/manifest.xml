@@ -2,36 +2,157 @@
 <OfficeApp
   xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
 
-  <!-- Basic Information -->
-  <Id>f9d10b7b-3b54-4e35-91a6-3cfb1cba7542</Id>
-  <Version>1.0.0.0</Version>
-  <ProviderName>Normaex</ProviderName>
-  <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Normaex AI"/>
-  <Description DefaultValue="AI Assistant for ABNT formatting and academic writing"/>
-  <IconUrl DefaultValue="https://localhost:3001/icon-64.png"/>
-  <HighResolutionIconUrl DefaultValue="https://localhost:3001/icon-128.png"/>
-  <SupportUrl DefaultValue="https://localhost:3001"/>
+  <!-- ============================================ -->
+  <!-- INFORMAÇÕES BÁSICAS                          -->
+  <!-- ============================================ -->
 
-  <!-- AppDomains must come before DefaultSettings -->
+  <!-- ID único do add-in (não alterar após publicação) -->
+  <Id>f9d10b7b-3b54-4e35-91a6-3cfb1cba7542</Id>
+
+  <!-- Versão: incrementar a cada atualização -->
+  <Version>2.0.0.0</Version>
+
+  <!-- Nome do desenvolvedor/empresa -->
+  <ProviderName>Normaex</ProviderName>
+
+  <!-- Idioma padrão (Office exige en-US como base) -->
+  <DefaultLocale>en-US</DefaultLocale>
+
+  <!-- Nome exibido na loja e no Word -->
+  <DisplayName DefaultValue="Normaex - Formatação ABNT com IA"/>
+
+  <!-- Descrição curta (125 caracteres max para AppSource) -->
+  <Description DefaultValue="Assistente de IA para formatação ABNT e escrita acadêmica. Analise, formate e escreva seu TCC com inteligência artificial."/>
+
+  <!-- URLs dos ícones (TROCAR PARA PRODUÇÃO) -->
+  <IconUrl DefaultValue="https://normaex.com.br/assets/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://normaex.com.br/assets/icon-128.png"/>
+
+  <!-- URL de suporte (obrigatório para AppSource) -->
+  <SupportUrl DefaultValue="https://normaex.com.br/suporte"/>
+
+  <!-- ============================================ -->
+  <!-- DOMÍNIOS PERMITIDOS                          -->
+  <!-- ============================================ -->
   <AppDomains>
+    <!-- Frontend do Add-in -->
+    <AppDomain>https://normaex.com.br</AppDomain>
+    <AppDomain>https://app.normaex.com.br</AppDomain>
+    <!-- Backend API -->
+    <AppDomain>https://api.normaex.com.br</AppDomain>
+    <!-- Desenvolvimento local (remover em produção final) -->
     <AppDomain>https://localhost:3001</AppDomain>
-    <AppDomain>https://localhost:8080</AppDomain>
   </AppDomains>
 
-  <!-- Hosts -->
+  <!-- ============================================ -->
+  <!-- HOSTS SUPORTADOS                             -->
+  <!-- ============================================ -->
   <Hosts>
+    <!-- Document = Microsoft Word -->
     <Host Name="Document"/>
   </Hosts>
 
-  <!-- Default Settings -->
+  <!-- ============================================ -->
+  <!-- REQUISITOS                                   -->
+  <!-- ============================================ -->
+  <Requirements>
+    <Sets>
+      <!-- API mínima do Word necessária -->
+      <Set Name="WordApi" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+
+  <!-- ============================================ -->
+  <!-- CONFIGURAÇÕES PADRÃO                         -->
+  <!-- ============================================ -->
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://localhost:3001/taskpane.html"/>
+    <!-- URL do taskpane (TROCAR PARA PRODUÇÃO) -->
+    <SourceLocation DefaultValue="https://normaex.com.br/taskpane.html"/>
   </DefaultSettings>
 
-  <!-- Permissions -->
+  <!-- ============================================ -->
+  <!-- PERMISSÕES                                   -->
+  <!-- ============================================ -->
+  <!-- ReadWriteDocument: necessário para ler e modificar o documento -->
   <Permissions>ReadWriteDocument</Permissions>
+
+  <!-- ============================================ -->
+  <!-- VERSÃO ESTENDIDA (Ribbon, comandos, etc)     -->
+  <!-- ============================================ -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneAppVersionOverridesV1_0">
+
+    <!-- Descrição longa para a loja -->
+    <Description resid="residDescription"/>
+
+    <!-- Recursos (strings, ícones, URLs) -->
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="https://normaex.com.br/assets/icon-16.png"/>
+        <bt:Image id="icon32" DefaultValue="https://normaex.com.br/assets/icon-32.png"/>
+        <bt:Image id="icon64" DefaultValue="https://normaex.com.br/assets/icon-64.png"/>
+        <bt:Image id="icon80" DefaultValue="https://normaex.com.br/assets/icon-80.png"/>
+      </bt:Images>
+
+      <bt:Urls>
+        <bt:Url id="residTaskpaneUrl" DefaultValue="https://normaex.com.br/taskpane.html"/>
+        <bt:Url id="residSupportUrl" DefaultValue="https://normaex.com.br/suporte"/>
+      </bt:Urls>
+
+      <bt:ShortStrings>
+        <bt:String id="residLabel" DefaultValue="Normaex AI"/>
+        <bt:String id="residGroupLabel" DefaultValue="Formatação ABNT"/>
+        <bt:String id="residButtonLabel" DefaultValue="Abrir Normaex"/>
+      </bt:ShortStrings>
+
+      <bt:LongStrings>
+        <bt:String id="residDescription" DefaultValue="Normaex é o assistente de IA definitivo para estudantes universitários brasileiros. Formate automaticamente seu TCC, monografia ou artigo científico conforme as normas ABNT. Use inteligência artificial para escrever, revisar e melhorar seus textos acadêmicos. Faça upload de PDFs de referência e deixe a IA usar como contexto para gerar conteúdo relevante."/>
+        <bt:String id="residTooltip" DefaultValue="Clique para abrir o assistente Normaex"/>
+      </bt:LongStrings>
+    </Resources>
+
+    <!-- Hosts com comandos de ribbon -->
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <!-- Ponto de extensão: Aba do Ribbon -->
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="NormaexGroup">
+                <Label resid="residGroupLabel"/>
+                <Icon>
+                  <bt:Image size="16" resid="icon16"/>
+                  <bt:Image size="32" resid="icon32"/>
+                  <bt:Image size="80" resid="icon80"/>
+                </Icon>
+
+                <!-- Botão para abrir o painel -->
+                <Control xsi:type="Button" id="NormaexButton">
+                  <Label resid="residButtonLabel"/>
+                  <Supertip>
+                    <Title resid="residLabel"/>
+                    <Description resid="residTooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16"/>
+                    <bt:Image size="32" resid="icon32"/>
+                    <bt:Image size="80" resid="icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>NormaexTaskpane</TaskpaneId>
+                    <SourceLocation resid="residTaskpaneUrl"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+  </VersionOverrides>
 
 </OfficeApp>

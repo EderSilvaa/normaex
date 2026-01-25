@@ -38,11 +38,23 @@ export interface ParagraphData {
   is_italic?: boolean;
 }
 
+export interface PageSetup {
+  margins: {
+    top_cm: number;
+    bottom_cm: number;
+    left_cm: number;
+    right_cm: number;
+  };
+  page_size: string;
+  orientation: string;
+}
+
 export interface DocumentContent {
   paragraphs: ParagraphData[];
   metadata?: Record<string, unknown>;
   format_type?: FormatType;
   full_text?: string;
+  page_setup?: PageSetup;
 }
 
 export interface SelectionContent {
@@ -124,11 +136,21 @@ export interface ChatRequest {
   message: string;
   context?: string;
   history?: Array<{ role: string; content: string }>;
+  project_id?: string;
+}
+
+export interface ContextInfo {
+  has_pdf_context: boolean;
+  project_name?: string | null;
+  pdf_count: number;
+  pdf_names: string[];
+  total_words: number;
 }
 
 export interface ChatResponse {
   message: string;
   suggestions?: string[];
+  context_info?: ContextInfo | null;
 }
 
 // ============================================
@@ -156,4 +178,66 @@ export interface HealthResponse {
   status: string;
   service: string;
   version: string;
+}
+
+// ============================================
+// PROJECTS
+// ============================================
+
+export type PDFStatus = 'pending' | 'processing' | 'ready' | 'error';
+
+export interface PDFSummary {
+  id: string;
+  filename: string;
+  status: PDFStatus;
+  page_count: number;
+  word_count: number;
+  upload_date: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string | null;
+  pdfs: PDFSummary[];
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  pdf_count: number;
+  total_words: number;
+  created_at: string;
+  is_active: boolean;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface ProjectResponse {
+  project: Project;
+  message: string;
+}
+
+export interface ProjectListResponse {
+  projects: ProjectSummary[];
+  total: number;
+}
+
+export interface PDFUploadResponse {
+  pdf: PDFSummary;
+  message: string;
+  project_id: string;
 }

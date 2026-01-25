@@ -12,10 +12,37 @@ import {
   ChatResponse,
   ImproveRequest,
   ImproveResponse,
-  HealthResponse
+  HealthResponse,
+  ProjectSummary,
+  Project,
+  ProjectResponse,
+  ProjectListResponse,
+  PDFUploadResponse,
+  CreateProjectRequest,
+  UpdateProjectRequest,
 } from '../types/api.types';
 
-const API_BASE_URL = 'http://localhost:8080/api/addin';
+// Detectar ambiente automaticamente
+const getApiBaseUrl = (): string => {
+  // Em produção (add-in hospedado)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+
+    // Desenvolvimento local
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000/api/addin';
+    }
+
+    // Produção - usar API no mesmo domínio base ou subdomínio
+    // Ajuste conforme sua configuração de deploy
+    return 'https://api.normaex.com.br/api/addin';
+  }
+
+  // Fallback para SSR ou testes
+  return 'http://localhost:8000/api/addin';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiServiceClass {
   private baseUrl: string;
@@ -115,6 +142,125 @@ class ApiServiceClass {
    */
   getStreamingUrl(): string {
     return `${this.baseUrl}/write-stream`;
+  }
+
+  // ============================================
+  // PROJECTS API
+  // ============================================
+
+  private get projectsBaseUrl(): string {
+    return this.baseUrl.replace('/api/addin', '/api/projects');
+  }
+
+  /**
+   * Lista todos os projetos
+   */
+  async listProjects(): Promise<ProjectListResponse> {
+    const url = this.projectsBaseUrl;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Cria um novo projeto
+   */
+  async createProject(request: CreateProjectRequest): Promise<ProjectResponse> {
+    const url = this.projectsBaseUrl;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Obtém detalhes de um projeto
+   */
+  async getProject(projectId: string): Promise<ProjectResponse> {
+    const url = `${this.projectsBaseUrl}/${projectId}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Atualiza um projeto
+   */
+  async updateProject(projectId: string, request: UpdateProjectRequest): Promise<ProjectResponse> {
+    const url = `${this.projectsBaseUrl}/${projectId}`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Deleta um projeto
+   */
+  async deleteProject(projectId: string): Promise<void> {
+    const url = `${this.projectsBaseUrl}/${projectId}`;
+    const response = await fetch(url, { method: 'DELETE' });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+  }
+
+  /**
+   * Faz upload de um PDF para um projeto
+   */
+  async uploadPDF(projectId: string, file: File): Promise<PDFUploadResponse> {
+    const url = `${this.projectsBaseUrl}/${projectId}/pdfs`;
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Remove um PDF de um projeto
+   */
+  async removePDF(projectId: string, pdfId: string): Promise<void> {
+    const url = `${this.projectsBaseUrl}/${projectId}/pdfs/${pdfId}`;
+    const response = await fetch(url, { method: 'DELETE' });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+  }
+
+  /**
+   * Proxy para buscar imagens externas (evita CORS)
+   */
+  async getImageProxy(imageUrl: string): Promise<{ success: boolean; base64?: string; content_type?: string }> {
+    const url = `${this.baseUrl}/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      return { success: false };
+    }
+    return response.json();
   }
 }
 

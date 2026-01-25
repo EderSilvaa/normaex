@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 
 // Services
-import { ApiService, DocumentService, StreamingService } from '../../services';
+import { ApiService, DocumentService } from '../../services';
 
 // Types
 import { AnalysisResponse, Issue } from '../../types';
@@ -11,33 +11,30 @@ import { AnalysisResponse, Issue } from '../../types';
 import ComplianceScore from './ComplianceScore';
 import IssuesList from './IssuesList';
 import ChatPanel from './ChatPanel';
-import WritingAssistant from './WritingAssistant';
 import TabNavigation from './TabNavigation';
 import FormatControls from './FormatControls';
+import ProjectSelector from './ProjectSelector';
 
-type TabId = 'analysis' | 'format' | 'write' | 'chat';
-type SectionType = 'introducao' | 'desenvolvimento' | 'conclusao' | 'resumo' | 'abstract' | 'geral';
+type TabId = 'abnt' | 'chat';
 
 interface AppProps {
   title: string;
 }
 
 const App: React.FC<AppProps> = ({ title }) => {
-  // Estado
+  // Estado simplificado
   const [isOfficeInitialized, setIsOfficeInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
-  const [activeTab, setActiveTab] = useState<TabId>('analysis');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamProgress, setStreamProgress] = useState(0);
+  const [activeTab, setActiveTab] = useState<TabId>('abnt');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectInfo, setSelectedProjectInfo] = useState<{ name: string; pdfCount: number } | null>(null);
 
-  // Tabs configuration
+  // Tabs: ABNT (análise + formatação), Chat (conversa + escrita + imagens)
   const tabs = [
-    { id: 'analysis', label: 'Analisar', icon: '📊', badge: analysis?.issues.length },
-    { id: 'format', label: 'Formatar', icon: '🎨' },
-    { id: 'write', label: 'Escrever', icon: '✨' },
+    { id: 'abnt', label: 'ABNT', icon: '📋', badge: analysis?.issues.length },
     { id: 'chat', label: 'Chat', icon: '💬' },
   ];
 
@@ -64,7 +61,8 @@ const App: React.FC<AppProps> = ({ title }) => {
     setAnalysis(null);
 
     try {
-      const content = await DocumentService.getDocumentContent();
+      // Usar versão com margens para análise completa
+      const content = await DocumentService.getDocumentContentWithMargins();
 
       if (!content.full_text?.trim()) {
         setMessage('O documento está vazio. Adicione conteúdo para analisar.');
@@ -83,74 +81,33 @@ const App: React.FC<AppProps> = ({ title }) => {
     }
   }, []);
 
-  // Gerar texto (não streaming)
-  const handleGenerate = useCallback(async (instruction: string, sectionType: SectionType) => {
-    setIsLoading(true);
-    setMessage('Gerando texto...');
 
-    try {
-      const content = await DocumentService.getDocumentContent();
-
-      const result = await ApiService.writeText({
-        instruction,
-        section_type: sectionType,
-        context: content.full_text?.substring(0, 1000),
-        format_type: 'abnt',
-      });
-
-      await DocumentService.insertText(result.text);
-      setMessage(`Texto gerado e inserido! (${result.word_count} palavras)`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      setMessage(`Erro: ${errorMessage}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Gerar texto com streaming
-  const handleGenerateStreaming = useCallback(async (instruction: string, sectionType: SectionType) => {
-    setIsStreaming(true);
-    setStreamProgress(0);
-    setMessage('Gerando texto...');
-
-    try {
-      const content = await DocumentService.getDocumentContent();
-
-      const fullText = await StreamingService.streamWriteToDocument(
-        {
-          instruction,
-          section_type: sectionType,
-          context: content.full_text?.substring(0, 1000),
-          format_type: 'abnt',
-        },
-        {
-          onProgress: (progress) => setStreamProgress(progress),
-          onError: (error) => setMessage(`Erro: ${error.message}`),
-        }
-      );
-
-      const wordCount = fullText.split(/\s+/).filter(Boolean).length;
-      setMessage(`Texto gerado! (${wordCount} palavras)`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      setMessage(`Erro: ${errorMessage}`);
-    } finally {
-      setIsStreaming(false);
-      setStreamProgress(0);
-    }
-  }, []);
-
-  // Chat
-  const handleChat = useCallback(async (userMessage: string): Promise<string> => {
+  // Chat - retorna resposta completa com context_info
+  const handleChat = useCallback(async (userMessage: string) => {
     const content = await DocumentService.getDocumentContent();
 
     const result = await ApiService.chat({
       message: userMessage,
       context: content.full_text?.substring(0, 2000),
+      project_id: selectedProjectId || undefined,
     });
 
-    return result.message;
+    return {
+      message: result.message,
+      suggestions: result.suggestions,
+      context_info: result.context_info,
+    };
+  }, [selectedProjectId]);
+
+  // Inserir texto no documento (usado pelo ChatPanel)
+  const handleInsertTextFromChat = useCallback(async (text: string) => {
+    try {
+      await DocumentService.insertText(text);
+      setMessage('Texto inserido no documento!');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setMessage(`Erro ao inserir: ${errorMessage}`);
+    }
   }, []);
 
   // Click na issue (navegar para localização)
@@ -217,43 +174,6 @@ const App: React.FC<AppProps> = ({ title }) => {
     }
   }, [analysis, analyzeDocument]);
 
-  // Formatação de seleção
-  const handleFormatSelection = useCallback(async (options: {
-    fontName?: string;
-    fontSize?: number;
-    bold?: boolean;
-    italic?: boolean;
-    alignment?: 'left' | 'center' | 'right' | 'justified';
-  }) => {
-    try {
-      await DocumentService.formatSelection(options);
-    } catch (error) {
-      console.error('Error formatting selection:', error);
-    }
-  }, []);
-
-  // Aplicar estilo de título
-  const handleApplyHeading = useCallback(async (level: 1 | 2 | 3) => {
-    try {
-      await DocumentService.applyHeadingStyle(level);
-      setMessage(`Estilo Título ${level} aplicado`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      setMessage(`Erro: ${errorMessage}`);
-    }
-  }, []);
-
-  // Aplicar citação em bloco
-  const handleApplyBlockQuote = useCallback(async () => {
-    try {
-      await DocumentService.formatAsBlockQuote();
-      setMessage('Formatação de citação aplicada');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      setMessage(`Erro: ${errorMessage}`);
-    }
-  }, []);
-
   // Loading screen
   if (!isOfficeInitialized) {
     return (
@@ -300,17 +220,19 @@ const App: React.FC<AppProps> = ({ title }) => {
           />
         </div>
 
-        {/* Tab: Analysis */}
-        {activeTab === 'analysis' && (
+        {/* Tab: ABNT (Análise + Formatação) */}
+        {activeTab === 'abnt' && (
           <div className="actions-section">
+            {/* Botão de Análise */}
             <button
               className="action-button primary"
               onClick={analyzeDocument}
               disabled={isLoading}
             >
-              {isLoading ? '⏳ Analisando...' : '📊 Analisar Conformidade ABNT'}
+              {isLoading ? '⏳ Analisando...' : '📊 Analisar Documento'}
             </button>
 
+            {/* Lista de Issues */}
             {analysis && (
               <div style={{ marginTop: '16px' }}>
                 <IssuesList
@@ -321,43 +243,34 @@ const App: React.FC<AppProps> = ({ title }) => {
                 />
               </div>
             )}
+
+            {/* Controles de Formatação */}
+            <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
+              <FormatControls
+                onAutoFormat={handleAutoFormat}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
         )}
 
-        {/* Tab: Format */}
-        {activeTab === 'format' && (
-          <div className="actions-section">
-            <FormatControls
-              onAutoFormat={handleAutoFormat}
-              onFormatSelection={handleFormatSelection}
-              onApplyHeading={handleApplyHeading}
-              onApplyBlockQuote={handleApplyBlockQuote}
-              isLoading={isLoading}
-            />
-          </div>
-        )}
-
-        {/* Tab: Write */}
-        {activeTab === 'write' && (
-          <div className="actions-section">
-            <WritingAssistant
-              onGenerate={handleGenerate}
-              onGenerateStreaming={handleGenerateStreaming}
-              isLoading={isLoading}
-              isStreaming={isStreaming}
-              streamProgress={streamProgress}
-            />
-          </div>
-        )}
-
-        {/* Tab: Chat */}
+        {/* Tab: Chat (Conversa + Escrita Integrada) */}
         {activeTab === 'chat' && (
           <div className="actions-section">
+            <ProjectSelector
+              selectedProjectId={selectedProjectId}
+              onProjectSelect={setSelectedProjectId}
+              onProjectInfoChange={setSelectedProjectInfo}
+              onMessage={setMessage}
+            />
             <ChatPanel
               onSendMessage={handleChat}
+              onInsertText={handleInsertTextFromChat}
               isLoading={isLoading}
-              placeholder="Pergunte sobre seu documento..."
-              welcomeMessage="Olá! Sou o assistente Normaex. Posso ajudar com formatação ABNT e sugestões."
+              placeholder="Pergunte ou peça para escrever algo..."
+              welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos. Ex: 'Escreva uma introdução sobre inteligência artificial'"
+              activeProjectName={selectedProjectInfo?.name}
+              activePdfCount={selectedProjectInfo?.pdfCount || 0}
             />
           </div>
         )}
