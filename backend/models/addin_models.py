@@ -216,3 +216,41 @@ class ValidationResult(BaseModel):
     score: int = Field(..., ge=0, le=100, description="Score atual")
     issues_count: int = Field(0, description="Número de problemas")
     quick_issues: List[str] = Field(default_factory=list, description="Lista rápida de problemas principais")
+
+
+# ============================================
+# CHART MODELS
+# ============================================
+
+class ChartType(str, Enum):
+    BAR = "bar"
+    BAR_HORIZONTAL = "bar_horizontal"
+    LINE = "line"
+    PIE = "pie"
+    AREA = "area"
+    SCATTER = "scatter"
+
+
+class ChartDataSeries(BaseModel):
+    """Uma série de dados para gráficos multi-série"""
+    name: str = Field(..., description="Nome da série")
+    values: List[float] = Field(..., description="Valores da série")
+
+
+class ChartRequest(BaseModel):
+    """Solicitação de geração de gráfico"""
+    chart_type: ChartType = Field(..., description="Tipo de gráfico")
+    labels: List[str] = Field(..., description="Rótulos dos dados (eixo X ou categorias)")
+    values: List[float] = Field(..., description="Valores numéricos")
+    title: Optional[str] = Field(None, description="Título do gráfico")
+    x_label: Optional[str] = Field(None, description="Rótulo do eixo X")
+    y_label: Optional[str] = Field(None, description="Rótulo do eixo Y")
+    colors: Optional[List[str]] = Field(None, description="Cores personalizadas (hex)")
+    series: Optional[List[ChartDataSeries]] = Field(None, description="Múltiplas séries (para gráficos comparativos)")
+
+
+class ChartResponse(BaseModel):
+    """Resposta com gráfico gerado"""
+    success: bool = Field(..., description="Se a geração foi bem-sucedida")
+    base64: Optional[str] = Field(None, description="Imagem do gráfico em base64")
+    error: Optional[str] = Field(None, description="Mensagem de erro se falhou")

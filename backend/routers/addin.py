@@ -27,7 +27,9 @@ from models.addin_models import (
     ChatResponse,
     ContextInfo,
     ImproveRequest,
-    ImproveResponse
+    ImproveResponse,
+    ChartRequest,
+    ChartResponse
 )
 
 from services.ai import (
@@ -38,6 +40,7 @@ from services.ai import (
 from services.ai_structural import analyze_document_with_ai
 from services.ai_writer import write_structured_streaming
 from services.project_service import project_service
+from services.chart_service import generate_chart, generate_multi_series_chart
 
 router = APIRouter(prefix="/addin", tags=["Office Add-in"])
 
@@ -769,3 +772,72 @@ async def image_proxy(url: str):
         raise HTTPException(status_code=e.response.status_code, detail="Erro ao buscar imagem")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no proxy de imagem: {str(e)}")
+
+
+# ============================================
+# CHART GENERATION (Gráficos)
+# ============================================
+
+@router.post("/generate-chart", response_model=ChartResponse)
+async def generate_chart_endpoint(request: ChartRequest):
+    """
+    Gera um gráfico e retorna como imagem base64.
+
+    Tipos suportados:
+    - bar: Barras verticais
+    - bar_horizontal: Barras horizontais
+    - line: Linhas
+    - pie: Pizza
+    - area: Área
+    - scatter: Dispersão
+    """
+    try:
+        # Validar dados
+        if len(request.labels) != len(request.values):
+            raise HTTPException(
+                status_code=400,
+                detail="Número de labels deve ser igual ao número de valores"
+            )
+
+        if len(request.labels) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Necessário pelo menos 2 pontos de dados"
+            )
+
+        # Verificar se é multi-série
+        if request.series and len(request.series) > 0:
+            # Gráfico multi-série
+            series_data = [{"name": s.name, "values": s.values} for s in request.series]
+            base64_image = generate_multi_series_chart(
+                chart_type=request.chart_type.value,
+                labels=request.labels,
+                series=series_data,
+                title=request.title,
+                x_label=request.x_label,
+                y_label=request.y_label
+            )
+        else:
+            # Gráfico simples
+            base64_image = generate_chart(
+                chart_type=request.chart_type.value,
+                labels=request.labels,
+                values=request.values,
+                title=request.title,
+                x_label=request.x_label,
+                y_label=request.y_label,
+                colors=request.colors
+            )
+
+        return ChartResponse(
+            success=True,
+            base64=base64_image
+        )
+
+    except ValueError as e:
+        return ChartResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar gráfico: {str(e)}")

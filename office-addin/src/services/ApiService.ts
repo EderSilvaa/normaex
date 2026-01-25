@@ -262,6 +262,45 @@ class ApiServiceClass {
     }
     return response.json();
   }
+
+  // ============================================
+  // CHART GENERATION
+  // ============================================
+
+  /**
+   * Gera um gráfico e retorna como imagem base64
+   */
+  async generateChart(request: ChartRequest): Promise<ChartResponse> {
+    return this.request<ChartResponse>('/generate-chart', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+}
+
+// Tipos para Chart
+export type ChartType = 'bar' | 'bar_horizontal' | 'line' | 'pie' | 'area' | 'scatter';
+
+export interface ChartDataSeries {
+  name: string;
+  values: number[];
+}
+
+export interface ChartRequest {
+  chart_type: ChartType;
+  labels: string[];
+  values: number[];
+  title?: string;
+  x_label?: string;
+  y_label?: string;
+  colors?: string[];
+  series?: ChartDataSeries[];
+}
+
+export interface ChartResponse {
+  success: boolean;
+  base64?: string;
+  error?: string;
 }
 
 // Exportar instância singleton

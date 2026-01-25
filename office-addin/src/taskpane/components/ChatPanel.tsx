@@ -1,11 +1,22 @@
 /**
- * ChatPanel - Painel de chat com histórico e anexo de imagens
- * Interface de conversação com a IA - Suporta texto e imagens
+ * ChatPanel - Painel de chat com histórico, anexo de imagens e gráficos
+ * Interface de conversação com a IA - Suporta texto, imagens e gráficos
  */
 
 import * as React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { DocumentService, ApiService } from '../../services';
+import type { ChartType } from '../../services';
+
+interface ChartConfig {
+  type: ChartType;
+  title: string;
+  labels: string;
+  values: string;
+  xLabel: string;
+  yLabel: string;
+  source: string;
+}
 
 interface ContextInfo {
   has_pdf_context: boolean;
@@ -90,6 +101,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+
+  // Estados para gráficos
+  const [showChartBuilder, setShowChartBuilder] = useState(false);
+  const [chartConfig, setChartConfig] = useState<ChartConfig>({
+    type: 'bar',
+    title: '',
+    labels: '',
+    values: '',
+    xLabel: '',
+    yLabel: '',
+    source: '',
+  });
+  const [chartPreview, setChartPreview] = useState<string | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -283,6 +308,102 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setPendingImage(null);
     setImageCaption('');
     setImageSource('');
+  };
+
+  // === FUNÇÕES DE GRÁFICO ===
+
+  // Gerar preview do gráfico
+  const handleGenerateChartPreview = async () => {
+    const labels = chartConfig.labels.split(',').map(l => l.trim()).filter(Boolean);
+    const values = chartConfig.values.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+
+    if (labels.length < 2 || values.length < 2) {
+      return;
+    }
+
+    if (labels.length !== values.length) {
+      return;
+    }
+
+    setChartLoading(true);
+    try {
+      const response = await ApiService.generateChart({
+        chart_type: chartConfig.type,
+        labels,
+        values,
+        title: chartConfig.title || undefined,
+        x_label: chartConfig.xLabel || undefined,
+        y_label: chartConfig.yLabel || undefined,
+      });
+
+      if (response.success && response.base64) {
+        setChartPreview(response.base64);
+      }
+    } catch (error) {
+      console.error('Erro ao gerar preview:', error);
+    } finally {
+      setChartLoading(false);
+    }
+  };
+
+  // Inserir gráfico no documento
+  const handleInsertChart = async () => {
+    if (!chartPreview || !chartConfig.title.trim()) return;
+
+    setSending(true);
+    try {
+      const result = await DocumentService.insertImageWithCaption(
+        chartPreview,
+        chartConfig.title,
+        chartConfig.source || 'Elaboração própria'
+      );
+
+      if (result.success) {
+        const userMsg: Message = {
+          id: generateId(),
+          role: 'user',
+          content: `Inserir gráfico: "${chartConfig.title}"`,
+          timestamp: new Date(),
+          image: { caption: chartConfig.title },
+        };
+
+        const assistantMsg: Message = {
+          id: generateId(),
+          role: 'assistant',
+          content: `Figura ${result.figureNumber} (${chartConfig.type === 'pie' ? 'Gráfico de pizza' : chartConfig.type === 'bar' ? 'Gráfico de barras' : chartConfig.type === 'line' ? 'Gráfico de linhas' : 'Gráfico'}) inserida no documento com formatação ABNT.`,
+          timestamp: new Date(),
+          image: { caption: chartConfig.title, figureNumber: result.figureNumber },
+        };
+
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+        handleCancelChart();
+      }
+    } catch (error) {
+      const errorMsg: Message = {
+        id: generateId(),
+        role: 'assistant',
+        content: `Erro ao inserir gráfico: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Cancelar criação de gráfico
+  const handleCancelChart = () => {
+    setShowChartBuilder(false);
+    setChartPreview(null);
+    setChartConfig({
+      type: 'bar',
+      title: '',
+      labels: '',
+      values: '',
+      xLabel: '',
+      yLabel: '',
+      source: '',
+    });
   };
 
   // Enviar mensagem de texto
@@ -709,6 +830,251 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         </div>
       )}
 
+      {/* Chart Builder */}
+      {showChartBuilder && (
+        <div
+          style={{
+            padding: '12px',
+            background: '#1a1a1a',
+            borderRadius: '10px',
+            marginBottom: '10px',
+            border: '1px solid #333',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#Eebb4d' }}>📊 Criar Gráfico</span>
+            <button
+              onClick={handleCancelChart}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '4px',
+                border: '1px solid #333',
+                background: 'transparent',
+                color: '#888',
+                fontSize: '10px',
+                cursor: 'pointer',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Tipo de gráfico */}
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Tipo</label>
+            <select
+              value={chartConfig.type}
+              onChange={(e) => {
+                setChartConfig({ ...chartConfig, type: e.target.value as ChartType });
+                setChartPreview(null);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                border: '1px solid #333',
+                background: '#0a0a0a',
+                color: '#fff',
+                fontSize: '11px',
+              }}
+            >
+              <option value="bar">Barras Verticais</option>
+              <option value="bar_horizontal">Barras Horizontais</option>
+              <option value="line">Linhas</option>
+              <option value="pie">Pizza</option>
+              <option value="area">Área</option>
+            </select>
+          </div>
+
+          {/* Título */}
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Título da Figura *</label>
+            <input
+              type="text"
+              placeholder="Ex: Evolução das vendas em 2024"
+              value={chartConfig.title}
+              onChange={(e) => setChartConfig({ ...chartConfig, title: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                border: '1px solid #333',
+                background: '#0a0a0a',
+                color: '#fff',
+                fontSize: '11px',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* Labels e Values */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Categorias (separadas por vírgula)</label>
+              <input
+                type="text"
+                placeholder="Jan, Fev, Mar, Abr"
+                value={chartConfig.labels}
+                onChange={(e) => {
+                  setChartConfig({ ...chartConfig, labels: e.target.value });
+                  setChartPreview(null);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: '1px solid #333',
+                  background: '#0a0a0a',
+                  color: '#fff',
+                  fontSize: '11px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Valores (separados por vírgula)</label>
+              <input
+                type="text"
+                placeholder="100, 150, 200, 180"
+                value={chartConfig.values}
+                onChange={(e) => {
+                  setChartConfig({ ...chartConfig, values: e.target.value });
+                  setChartPreview(null);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: '1px solid #333',
+                  background: '#0a0a0a',
+                  color: '#fff',
+                  fontSize: '11px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Rótulos dos eixos */}
+          {chartConfig.type !== 'pie' && (
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Eixo X (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Meses"
+                  value={chartConfig.xLabel}
+                  onChange={(e) => setChartConfig({ ...chartConfig, xLabel: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid #333',
+                    background: '#0a0a0a',
+                    color: '#fff',
+                    fontSize: '11px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Eixo Y (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Vendas (R$)"
+                  value={chartConfig.yLabel}
+                  onChange={(e) => setChartConfig({ ...chartConfig, yLabel: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid #333',
+                    background: '#0a0a0a',
+                    color: '#fff',
+                    fontSize: '11px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Fonte */}
+          <div style={{ marginBottom: '10px' }}>
+            <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Fonte</label>
+            <input
+              type="text"
+              placeholder="Elaboração própria"
+              value={chartConfig.source}
+              onChange={(e) => setChartConfig({ ...chartConfig, source: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                border: '1px solid #333',
+                background: '#0a0a0a',
+                color: '#fff',
+                fontSize: '11px',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* Preview */}
+          {chartPreview && (
+            <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+              <img
+                src={`data:image/png;base64,${chartPreview}`}
+                alt="Preview do gráfico"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '150px',
+                  borderRadius: '6px',
+                  border: '1px solid #333',
+                }}
+              />
+            </div>
+          )}
+
+          {/* Botões */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={handleGenerateChartPreview}
+              disabled={chartLoading || !chartConfig.labels.trim() || !chartConfig.values.trim()}
+              style={{
+                flex: 1,
+                padding: '10px',
+                borderRadius: '6px',
+                border: '1px solid #333',
+                background: 'transparent',
+                color: chartConfig.labels.trim() && chartConfig.values.trim() ? '#fff' : '#666',
+                fontSize: '11px',
+                cursor: chartConfig.labels.trim() && chartConfig.values.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {chartLoading ? 'Gerando...' : '👁️ Visualizar'}
+            </button>
+            <button
+              onClick={handleInsertChart}
+              disabled={!chartPreview || !chartConfig.title.trim() || sending}
+              style={{
+                flex: 1,
+                padding: '10px',
+                borderRadius: '6px',
+                border: 'none',
+                background: chartPreview && chartConfig.title.trim() && !sending ? '#Eebb4d' : '#333',
+                color: chartPreview && chartConfig.title.trim() && !sending ? '#0a0a0a' : '#666',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: chartPreview && chartConfig.title.trim() && !sending ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {sending ? 'Inserindo...' : '📄 Inserir no Documento'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input com botão de anexar */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         {/* Botão de anexar imagem */}
@@ -800,6 +1166,34 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               >
                 🔍 Banco de Imagens
               </button>
+              <button
+                onClick={() => {
+                  setShowChartBuilder(true);
+                  setShowImageMenu(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontSize: '11px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  borderTop: '1px solid #333',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                📊 Criar Gráfico
+              </button>
             </div>
           )}
         </div>
@@ -821,7 +1215,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           placeholder={placeholder}
-          disabled={sending || isLoading || !!pendingImage}
+          disabled={sending || isLoading || !!pendingImage || showChartBuilder}
           style={{
             flex: 1,
             padding: '10px 12px',
@@ -844,16 +1238,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         {/* Botão de enviar */}
         <button
           onClick={handleSend}
-          disabled={!input.trim() || sending || isLoading || !!pendingImage}
+          disabled={!input.trim() || sending || isLoading || !!pendingImage || showChartBuilder}
           style={{
             padding: '10px 14px',
             borderRadius: '10px',
             border: 'none',
-            background: input.trim() && !sending && !pendingImage ? '#Eebb4d' : '#333',
-            color: input.trim() && !sending && !pendingImage ? '#0a0a0a' : '#666',
+            background: input.trim() && !sending && !pendingImage && !showChartBuilder ? '#Eebb4d' : '#333',
+            color: input.trim() && !sending && !pendingImage && !showChartBuilder ? '#0a0a0a' : '#666',
             fontWeight: 600,
             fontSize: '14px',
-            cursor: input.trim() && !sending && !pendingImage ? 'pointer' : 'not-allowed',
+            cursor: input.trim() && !sending && !pendingImage && !showChartBuilder ? 'pointer' : 'not-allowed',
             flexShrink: 0,
           }}
         >

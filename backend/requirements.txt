@@ -9,3 +9,5 @@ PyMuPDF
 mammoth
 sse-starlette
 docx2pdf
+httpx
+matplotlib
