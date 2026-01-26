@@ -20,6 +20,10 @@ import {
   PDFUploadResponse,
   CreateProjectRequest,
   UpdateProjectRequest,
+  SearchRequest,
+  SearchResponse,
+  StructureRequest,
+  StructureResponse,
 } from '../types/api.types';
 
 // Detectar ambiente automaticamente
@@ -260,6 +264,48 @@ class ApiServiceClass {
     if (!response.ok) {
       return { success: false };
     }
+    return response.json();
+  }
+
+  // ============================================
+  // RESEARCH / SEARCH
+  // ============================================
+
+  /**
+   * Busca trabalhos acadêmicos
+   */
+  async searchWorks(request: SearchRequest): Promise<SearchResponse> {
+    const url = this.baseUrl.replace('/api/addin', '/api/research/search');
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Gera sugestão de estrutura (sumário)
+   */
+  async generateStructure(request: StructureRequest): Promise<StructureResponse> {
+    const url = this.baseUrl.replace('/api/addin', '/api/research/structure');
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
     return response.json();
   }
 

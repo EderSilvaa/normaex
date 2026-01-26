@@ -1,5 +1,8 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { theme } from '../../styles/theme';
 
 // Services
 import { ApiService, DocumentService } from '../../services';
@@ -13,11 +16,11 @@ import IssuesList from './IssuesList';
 import ChatPanel from './ChatPanel';
 import TabNavigation from './TabNavigation';
 import FormatControls from './FormatControls';
-import ProjectSelector from './ProjectSelector';
 import NormSelector, { WorkConfig } from './NormSelector';
+import ResearchPanel from './ResearchPanel';
 import { getNormConfig, NormConfig } from '../../config/norms.config';
 
-type TabId = 'abnt' | 'chat' | 'config';
+type TabId = 'abnt' | 'chat' | 'config' | 'research';
 
 interface AppProps {
   title: string;
@@ -56,6 +59,7 @@ const App: React.FC<AppProps> = ({ title }) => {
   const tabs = [
     { id: 'abnt', label: currentNormConfig.name, icon: currentNormConfig.icon, badge: analysis?.issues.length },
     { id: 'chat', label: 'Chat', icon: '💬' },
+    { id: 'research', label: 'Busca', icon: '🔍' },
     { id: 'config', label: 'Config', icon: '⚙️' },
   ];
 
@@ -224,32 +228,30 @@ const App: React.FC<AppProps> = ({ title }) => {
   }
 
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="logo-container">
-          <h1>{title}</h1>
-          <span className="version">v2.0.0</span>
-        </div>
-        <p className="tagline">Assistente de IA para Documentos Acadêmicos</p>
-      </header>
+    <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: theme.colors.background }}>
+
 
       {/* Main Content */}
-      <main className="app-main">
+      <main className="app-main" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', paddingBottom: '10px', paddingTop: '16px' }}>
+
         {/* Score Display */}
-        {analysis && (
-          <div className="welcome-card">
-            <ComplianceScore
-              score={analysis.score}
-              issueCount={analysis.issues.length}
-              size="medium"
-              animate={true}
-            />
+        {analysis && activeTab === 'abnt' && (
+          <div style={{ flexShrink: 0, padding: `0 ${theme.spacing.md}` }}>
+            <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
+              <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
+                <ComplianceScore
+                  score={analysis.score}
+                  issueCount={analysis.issues.length}
+                  size="medium"
+                  animate={true}
+                />
+              </div>
+            </Card>
           </div>
         )}
 
         {/* Tabs */}
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ marginBottom: '16px', flexShrink: 0 }}>
           <TabNavigation
             tabs={tabs}
             activeTab={activeTab}
@@ -259,106 +261,131 @@ const App: React.FC<AppProps> = ({ title }) => {
           />
         </div>
 
-        {/* Tab: ABNT (Análise + Formatação) */}
-        {activeTab === 'abnt' && (
-          <div className="actions-section">
-            {/* Botão de Análise */}
-            <button
-              className="action-button primary"
-              onClick={analyzeDocument}
-              disabled={isLoading}
-            >
-              {isLoading ? '⏳ Analisando...' : '📊 Analisar Documento'}
-            </button>
+        {/* ... (Tab Content mantido igual, apenas garantindo o render dentro do main) */}
 
-            {/* Lista de Issues */}
-            {analysis && (
-              <div style={{ marginTop: '16px' }}>
-                <IssuesList
-                  issues={analysis.issues}
-                  maxVisible={5}
-                  onIssueClick={handleIssueClick}
-                  onApplyFix={handleApplyFix}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* Tab: ABNT */}
+          {activeTab === 'abnt' && (
+            <div className="actions-section">
+              <Button
+                variant="primary"
+                onClick={analyzeDocument}
+                isLoading={isLoading}
+                fullWidth
+                leftIcon={<span>📊</span>}
+              >
+                Analisar Documento
+              </Button>
+
+              {message && (
+                <div style={{
+                  marginTop: theme.spacing.md,
+                  padding: theme.spacing.sm,
+                  background: theme.colors.surfaceHighlight,
+                  borderLeft: `3px solid ${theme.colors.primary}`,
+                  borderRadius: theme.borderRadius.sm
+                }}>
+                  <p style={{ margin: 0, fontSize: theme.typography.sizes.sm, color: theme.colors.text.primary }}>{message}</p>
+                </div>
+              )}
+
+              {analysis && (
+                <div style={{ marginTop: '16px' }}>
+                  <IssuesList
+                    issues={analysis.issues}
+                    maxVisible={5}
+                    onIssueClick={handleIssueClick}
+                    onApplyFix={handleApplyFix}
+                  />
+                </div>
+              )}
+
+              <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
+                <FormatControls
+                  onAutoFormat={handleAutoFormat}
+                  isLoading={isLoading}
+                  normName={currentNormConfig.name}
                 />
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Controles de Formatação */}
-            <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
-              <FormatControls
-                onAutoFormat={handleAutoFormat}
+          {/* Tab: Chat */}
+          {activeTab === 'chat' && (
+            <div className="actions-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <ChatPanel
+                onSendMessage={handleChat}
+                onInsertText={handleInsertTextFromChat}
                 isLoading={isLoading}
-                normName={currentNormConfig.name}
+                placeholder="Pergunte ou peça para escrever algo..."
+                welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos."
+                activeProjectName={selectedProjectInfo?.name}
+                activePdfCount={selectedProjectInfo?.pdfCount || 0}
+                selectedProjectId={selectedProjectId}
+                onProjectSelect={setSelectedProjectId}
+                onProjectInfoChange={setSelectedProjectInfo}
+                onFeedbackMessage={setMessage}
               />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Tab: Chat (Conversa + Escrita Integrada) */}
-        {activeTab === 'chat' && (
-          <div className="actions-section">
-            <ProjectSelector
-              selectedProjectId={selectedProjectId}
-              onProjectSelect={setSelectedProjectId}
-              onProjectInfoChange={setSelectedProjectInfo}
-              onMessage={setMessage}
-            />
-            <ChatPanel
-              onSendMessage={handleChat}
-              onInsertText={handleInsertTextFromChat}
-              isLoading={isLoading}
-              placeholder="Pergunte ou peça para escrever algo..."
-              welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos. Ex: 'Escreva uma introdução sobre inteligência artificial'"
-              activeProjectName={selectedProjectInfo?.name}
-              activePdfCount={selectedProjectInfo?.pdfCount || 0}
-            />
-          </div>
-        )}
+          {/* Tab: Research */}
+          {activeTab === 'research' && (
+            <div className="actions-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <ResearchPanel
+                normName={currentNormConfig.name}
+                workType={workConfig.workType}
+                knowledgeArea={workConfig.area}
+                onInsertReference={handleInsertTextFromChat}
+              />
+            </div>
+          )}
 
-        {/* Tab: Config (Configurações de Norma) */}
-        {activeTab === 'config' && (
-          <div className="actions-section">
-            <NormSelector
-              currentConfig={workConfig}
-              onConfigChange={handleWorkConfigChange}
-            />
-          </div>
-        )}
-
-        {/* Message Display */}
-        {message && activeTab !== 'chat' && (
-          <div className="message-box">
-            <p>{message}</p>
-          </div>
-        )}
-
-        {/* Status */}
-        <div className="status-section">
-          <div className="status-item">
-            <span
-              className={`status-indicator ${backendStatus === 'online' ? 'online' : 'offline'}`}
-            ></span>
-            <span>
-              Backend:{' '}
-              {backendStatus === 'online'
-                ? 'Conectado'
-                : backendStatus === 'checking'
-                  ? 'Verificando...'
-                  : 'Desconectado'}
-            </span>
-          </div>
-          <div className="status-item">
-            <span className="status-indicator online"></span>
-            <span>Word API: Ativa</span>
-          </div>
+          {/* Tab: Config */}
+          {activeTab === 'config' && (
+            <div className="actions-section">
+              <NormSelector
+                currentConfig={workConfig}
+                onConfigChange={handleWorkConfigChange}
+              />
+            </div>
+          )}
         </div>
+
+
       </main>
 
-      {/* Footer */}
-      <footer className="app-footer">
-        <p>
-          Powered by <strong>Normaex</strong> | FastAPI + Gemini AI
-        </p>
+      {/* Footer com Status */}
+      <footer className="app-footer" style={{
+        flexShrink: 0,
+        padding: '8px 16px',
+        borderTop: `1px solid ${theme.colors.border}`,
+        background: theme.colors.surface,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: '10px',
+        color: theme.colors.text.tertiary
+      }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{
+              width: '6px', height: '6px', borderRadius: '50%',
+              background: backendStatus === 'online' ? theme.colors.success : theme.colors.error
+            }} />
+            <span>Backend</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{
+              width: '6px', height: '6px', borderRadius: '50%',
+              background: theme.colors.success
+            }} />
+            <span>Word API</span>
+          </div>
+        </div>
+        <div>
+          Normaex AI
+        </div>
       </footer>
     </div>
   );

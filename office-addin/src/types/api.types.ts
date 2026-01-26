@@ -244,3 +244,44 @@ export interface PDFUploadResponse {
   message: string;
   project_id: string;
 }
+
+// ============================================
+// RESEARCH / SEARCH
+// ============================================
+
+export interface SearchRequest {
+  query: string;
+  norm: string;
+  year_min?: number;
+  limit?: number;
+}
+
+export interface SearchResult {
+  id: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  type: string;
+  abstract: string;
+  reference: string;
+  url?: string;
+  citation_count: number;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total_found: number;
+  message: string;
+}
+
+export interface StructureRequest {
+  theme: string;
+  work_type: string;
+  knowledge_area: string;
+  norm: string;
+}
+
+export interface StructureResponse {
+  structure: string;
+  message: string;
+}

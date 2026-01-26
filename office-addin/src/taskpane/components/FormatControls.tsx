@@ -4,6 +4,8 @@
 
 import * as React from 'react';
 import { useState } from 'react';
+import { Button } from './ui/Button';
+import { theme } from '../../styles/theme';
 
 interface FormatControlsProps {
   onAutoFormat: () => Promise<void>;
@@ -50,41 +52,31 @@ const FormatControls: React.FC<FormatControlsProps> = ({
   return (
     <div>
       {/* Botão principal de Auto-Format */}
-      <button
+      <Button
+        variant="primary"
+        fullWidth
         onClick={handleAutoFormat}
-        disabled={isDisabled}
+        isLoading={isDisabled}
         style={{
-          width: '100%',
-          padding: '12px',
-          borderRadius: '10px',
-          border: 'none',
-          background: isDisabled ? '#333' : 'linear-gradient(135deg, #Eebb4d 0%, #f5d485 100%)',
-          color: isDisabled ? '#666' : '#0a0a0a',
-          fontWeight: 700,
-          fontSize: '13px',
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          boxShadow: isDisabled ? 'none' : '0 4px 16px rgba(238, 187, 77, 0.3)',
-          transition: 'all 0.2s',
+          fontWeight: theme.typography.weights.black,
+          fontSize: theme.typography.sizes.sm,
+          boxShadow: isDisabled ? 'none' : theme.shadows.md,
         }}
       >
-        {processing ? 'Formatando...' : `Aplicar Formatação ${normName}`}
-      </button>
+        {`Aplicar Formatação ${normName}`}
+      </Button>
 
       {/* Resultado */}
       {result && (
         <div
           style={{
-            padding: '10px 12px',
-            marginTop: '10px',
-            borderRadius: '8px',
-            background: result.success ? '#10b98115' : '#ef444415',
-            borderLeft: `3px solid ${result.success ? '#10b981' : '#ef4444'}`,
-            fontSize: '12px',
-            color: result.success ? '#10b981' : '#ef4444',
+            padding: theme.spacing.sm,
+            marginTop: theme.spacing.sm,
+            borderRadius: theme.borderRadius.md,
+            background: result.success ? `${theme.colors.success}15` : `${theme.colors.error}15`,
+            borderLeft: `3px solid ${result.success ? theme.colors.success : theme.colors.error}`,
+            fontSize: theme.typography.sizes.sm,
+            color: result.success ? theme.colors.success : theme.colors.error,
           }}
         >
           {result.message}

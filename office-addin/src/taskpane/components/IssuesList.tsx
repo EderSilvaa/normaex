@@ -6,6 +6,9 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { Issue } from '../../types';
+import { Card } from './ui/Card';
+import { Button } from './ui/Button';
+import { theme } from '../../styles/theme';
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'info';
 
@@ -24,6 +27,7 @@ const IssuesList: React.FC<IssuesListProps> = ({
 }) => {
   const [filter, setFilter] = useState<SeverityFilter>('all');
   const [expanded, setExpanded] = useState(false);
+  const [expandedIssueIndex, setExpandedIssueIndex] = useState<number | null>(null);
 
   // Filtrar issues
   const filteredIssues = issues.filter((issue) => {
@@ -45,210 +49,157 @@ const IssuesList: React.FC<IssuesListProps> = ({
   // Cores por severidade
   const getSeverityColor = (severity: Issue['severity']): string => {
     switch (severity) {
-      case 'error':
-        return '#ef4444';
-      case 'warning':
-        return '#f59e0b';
-      case 'info':
-        return '#3b82f6';
-      default:
-        return '#666';
+      case 'error': return theme.colors.error;
+      case 'warning': return theme.colors.warning;
+      case 'info': return theme.colors.info;
+      default: return theme.colors.text.secondary;
     }
   };
 
   // Ícones por severidade
   const getSeverityIcon = (severity: Issue['severity']): string => {
     switch (severity) {
-      case 'error':
-        return '✕';
-      case 'warning':
-        return '⚠';
-      case 'info':
-        return 'ℹ';
-      default:
-        return '•';
+      case 'error': return '✕';
+      case 'warning': return '⚠';
+      case 'info': return 'ℹ';
+      default: return '•';
     }
   };
 
   if (issues.length === 0) {
     return (
-      <div
-        style={{
-          padding: '24px',
-          textAlign: 'center',
-          background: '#0d1f0d',
-          borderRadius: '12px',
-          border: '1px solid #10b98133',
-        }}
-      >
+      <Card style={{ textAlign: 'center', background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
         <span style={{ fontSize: '24px' }}>✓</span>
-        <p style={{ color: '#10b981', margin: '8px 0 0', fontWeight: 600 }}>
+        <p style={{ color: theme.colors.success, margin: '8px 0 0', fontWeight: 600 }}>
           Nenhum problema encontrado!
         </p>
-        <p style={{ color: '#666', fontSize: '12px', margin: '4px 0 0' }}>
-          Seu documento está em conformidade com as normas ABNT.
+        <p style={{ color: theme.colors.text.secondary, fontSize: theme.typography.sizes.xs, margin: '4px 0 0' }}>
+          Seu documento está em conformidade com as normas.
         </p>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div>
       {/* Header com filtros */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '12px',
-        }}
-      >
-        <h4 style={{ color: '#999', fontSize: '12px', margin: 0, textTransform: 'uppercase' }}>
-          Problemas Encontrados
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.sm }}>
+        <h4 style={{ color: theme.colors.text.tertiary, fontSize: theme.typography.sizes.xs, margin: 0, textTransform: 'uppercase' }}>
+          Problemas
         </h4>
 
-        {/* Filtros */}
+        {/* Filtros em forma de pills */}
         <div style={{ display: 'flex', gap: '4px' }}>
           {(['all', 'error', 'warning', 'info'] as SeverityFilter[]).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               style={{
-                padding: '4px 8px',
-                fontSize: '11px',
-                fontWeight: 500,
+                padding: '2px 8px',
+                fontSize: '10px',
+                fontWeight: 600,
                 border: 'none',
-                borderRadius: '4px',
+                borderRadius: '12px',
                 cursor: 'pointer',
-                background: filter === f ? '#333' : 'transparent',
-                color: filter === f ? '#fff' : '#666',
-                transition: 'all 0.2s',
+                background: filter === f ? theme.colors.surfaceHighlight : 'transparent',
+                color: filter === f ? theme.colors.text.primary : theme.colors.text.tertiary,
+                transition: theme.transitions.fast,
               }}
             >
-              {f === 'all' ? 'Todos' : f === 'error' ? `Erros (${counts.error})` : f === 'warning' ? `Avisos (${counts.warning})` : `Info (${counts.info})`}
+              {f === 'all' ? 'Todos' : f === 'error' ? `${counts.error}` : f === 'warning' ? `${counts.warning}` : `${counts.info}`}
+              <span style={{ marginLeft: '4px', opacity: 0.5 }}>
+                {f === 'error' && counts.error > 0 ? '✕' : f === 'warning' && counts.warning > 0 ? '⚠' : f === 'info' && counts.info > 0 ? 'ℹ' : ''}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Lista de issues */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {visibleIssues.map((issue, index) => (
-          <div
-            key={index}
-            onClick={() => onIssueClick?.(issue)}
-            style={{
-              background: '#1a1a1a',
-              borderRadius: '8px',
-              padding: '12px',
-              borderLeft: `3px solid ${getSeverityColor(issue.severity)}`,
-              cursor: onIssueClick ? 'pointer' : 'default',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (onIssueClick) {
-                e.currentTarget.style.background = '#222';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#1a1a1a';
-            }}
-          >
-            {/* Header da issue */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <span
-                style={{
-                  color: getSeverityColor(issue.severity),
-                  fontSize: '14px',
-                  lineHeight: 1,
-                }}
-              >
-                {getSeverityIcon(issue.severity)}
-              </span>
-              <div style={{ flex: 1 }}>
-                <p style={{ color: '#fff', fontSize: '13px', margin: 0, lineHeight: 1.4 }}>
-                  {issue.message}
-                </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {visibleIssues.map((issue, index) => {
+          const isExpanded = expandedIssueIndex === index;
+          const severityColor = getSeverityColor(issue.severity);
 
-                {/* Localização */}
-                {issue.location && (
-                  <p style={{ color: '#666', fontSize: '11px', margin: '4px 0 0' }}>
-                    📍 {issue.location}
+          return (
+            <Card
+              key={index}
+              onClick={() => {
+                setExpandedIssueIndex(isExpanded ? null : index);
+                onIssueClick?.(issue);
+              }}
+              style={{
+                cursor: 'pointer',
+                borderLeft: `3px solid ${severityColor}`,
+                padding: '10px',
+                borderColor: isExpanded ? theme.colors.primary : 'transparent'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: severityColor, fontSize: '14px', lineHeight: 1 }}>
+                  {getSeverityIcon(issue.severity)}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    color: theme.colors.text.primary,
+                    fontSize: theme.typography.sizes.sm,
+                    margin: 0,
+                    overflow: 'hidden',
+                    whiteSpace: isExpanded ? 'normal' : 'nowrap',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {issue.message}
                   </p>
-                )}
-
-                {/* Sugestão */}
-                {issue.suggestion && (
-                  <p style={{ color: '#888', fontSize: '11px', margin: '6px 0 0', fontStyle: 'italic' }}>
-                    💡 {issue.suggestion}
-                  </p>
-                )}
+                </div>
               </div>
-            </div>
 
-            {/* Botão de correção automática */}
-            {issue.auto_fix && onApplyFix && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onApplyFix(issue);
-                }}
-                style={{
-                  marginTop: '8px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: '4px',
-                  background: '#Eebb4d22',
-                  color: '#Eebb4d',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#Eebb4d33';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#Eebb4d22';
-                }}
-              >
-                ⚡ Corrigir automaticamente
-              </button>
-            )}
-          </div>
-        ))}
+              {isExpanded && (
+                <div style={{ marginTop: '8px', paddingLeft: '22px', borderTop: `1px solid ${theme.colors.border}`, paddingTop: '8px' }}>
+                  {issue.location && (
+                    <p style={{ color: theme.colors.text.tertiary, fontSize: '11px', margin: '0 0 4px 0' }}>
+                      📍 {issue.location}
+                    </p>
+                  )}
+
+                  {issue.suggestion && (
+                    <p style={{ color: theme.colors.text.secondary, fontSize: '11px', margin: '4px 0 8px 0', fontStyle: 'italic' }}>
+                      💡 {issue.suggestion}
+                    </p>
+                  )}
+
+                  {issue.auto_fix && onApplyFix && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      fullWidth
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onApplyFix(issue);
+                      }}
+                    >
+                      ⚡ Corrigir Automaticamente
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
       {/* Botão para ver mais */}
       {hasMore && (
-        <button
+        <Button
+          size="sm"
+          variant="ghost"
+          fullWidth
           onClick={() => setExpanded(!expanded)}
-          style={{
-            width: '100%',
-            marginTop: '8px',
-            padding: '10px',
-            fontSize: '12px',
-            fontWeight: 500,
-            border: '1px dashed #333',
-            borderRadius: '8px',
-            background: 'transparent',
-            color: '#888',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#Eebb4d';
-            e.currentTarget.style.color = '#Eebb4d';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#333';
-            e.currentTarget.style.color = '#888';
-          }}
+          style={{ marginTop: '8px' }}
         >
           {expanded
             ? '▲ Mostrar menos'
             : `▼ Ver mais ${filteredIssues.length - maxVisible} problema${filteredIssues.length - maxVisible > 1 ? 's' : ''}`}
-        </button>
+        </Button>
       )}
     </div>
   );

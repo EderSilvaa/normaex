@@ -7,6 +7,12 @@ import * as React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { DocumentService, ApiService } from '../../services';
 import type { ChartType } from '../../services';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Card } from './ui/Card';
+
+import ProjectSelector from './ProjectSelector';
+import { theme } from '../../styles/theme';
 
 interface ChartConfig {
   type: ChartType;
@@ -66,6 +72,10 @@ interface ChatPanelProps {
   welcomeMessage?: string;
   activeProjectName?: string | null;
   activePdfCount?: number;
+  selectedProjectId?: string | null;
+  onProjectSelect?: (projectId: string | null) => void;
+  onProjectInfoChange?: (info: { name: string; pdfCount: number } | null) => void;
+  onFeedbackMessage?: (message: string) => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -76,6 +86,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   welcomeMessage = 'Olá! Posso ajudar com formatação ABNT e sugestões.',
   activeProjectName,
   activePdfCount = 0,
+  selectedProjectId,
+  onProjectSelect,
+  onProjectInfoChange,
+  onFeedbackMessage,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -94,6 +108,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   // Estados para imagens
   const [showImageMenu, setShowImageMenu] = useState(false);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showImageSearch, setShowImageSearch] = useState(false);
   const [pendingImage, setPendingImage] = useState<ImageAttachment | null>(null);
   const [imageCaption, setImageCaption] = useState('');
@@ -462,29 +477,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const quickSuggestions = ['Citações ABNT', 'Margens', 'Revisar texto'];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '200px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: theme.spacing.sm }}>
       {/* Context Indicator */}
       {activeProjectName && activePdfCount > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 10px',
-            background: 'linear-gradient(90deg, rgba(238,187,77,0.15) 0%, rgba(238,187,77,0.05) 100%)',
-            borderRadius: '8px',
-            marginBottom: '8px',
-            border: '1px solid rgba(238,187,77,0.3)',
-          }}
-        >
-          <span style={{ fontSize: '14px' }}>📚</span>
-          <span style={{ fontSize: '11px', color: '#Eebb4d', fontWeight: 500 }}>
-            {activePdfCount} PDF{activePdfCount > 1 ? 's' : ''} como contexto
-          </span>
-          <span style={{ fontSize: '10px', color: '#888', marginLeft: 'auto' }}>
-            {activeProjectName}
-          </span>
-        </div>
+        <Card noPadding style={{ background: theme.colors.primaryAlpha, border: `1px solid ${theme.colors.primary}`, padding: theme.spacing.sm }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+            <span style={{ fontSize: '14px' }}>📚</span>
+            <span style={{ fontSize: theme.typography.sizes.xs, color: theme.colors.primary, fontWeight: 600 }}>
+              {activePdfCount} PDF{activePdfCount > 1 ? 's' : ''} como contexto
+            </span>
+            <span style={{ fontSize: theme.typography.sizes.xs, color: theme.colors.text.secondary, marginLeft: 'auto' }}>
+              {activeProjectName}
+            </span>
+          </div>
+        </Card>
       )}
 
       {/* Mensagens */}
@@ -492,11 +498,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '10px',
-          background: '#0a0a0a',
-          borderRadius: '10px',
-          marginBottom: '10px',
-          maxHeight: '250px',
+          padding: theme.spacing.md,
+          background: theme.colors.background,
+          borderRadius: theme.borderRadius.md,
+          border: `1px solid ${theme.colors.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: theme.spacing.md
         }}
       >
         {messages.map((message) => {
@@ -510,63 +518,46 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
-                marginBottom: '10px',
               }}
             >
               <div
                 style={{
-                  maxWidth: '90%',
-                  padding: '8px 12px',
-                  borderRadius: message.role === 'user' ? '10px 10px 4px 10px' : '10px 10px 10px 4px',
-                  background: message.role === 'user' ? '#Eebb4d' : '#1a1a1a',
-                  color: message.role === 'user' ? '#0a0a0a' : '#fff',
+                  maxWidth: '85%',
+                  padding: theme.spacing.sm,
+                  borderRadius: message.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                  background: message.role === 'user' ? theme.colors.primary : theme.colors.surfaceHighlight,
+                  color: message.role === 'user' ? theme.colors.text.inverse : theme.colors.text.primary,
+                  boxShadow: theme.shadows.sm
                 }}
               >
                 {/* Indicador de imagem */}
                 {message.image && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      marginBottom: '4px',
-                      fontSize: '11px',
-                      opacity: 0.8,
-                    }}
-                  >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px', fontSize: '11px', opacity: 0.8 }}>
                     🖼️ {message.image.figureNumber ? `Figura ${message.image.figureNumber}` : 'Imagem'}
                   </div>
                 )}
 
-                <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                <p style={{ margin: 0, fontSize: theme.typography.sizes.sm, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                   {message.content}
                 </p>
 
                 {/* Botão para inserir texto gerado */}
                 {generatedText && onInsertText && (
-                  <button
-                    onClick={() => handleInsertText(message.id, message.content)}
-                    disabled={isInsertingThis}
-                    style={{
-                      marginTop: '8px',
-                      padding: '6px 12px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      border: 'none',
-                      borderRadius: '6px',
-                      background: isInsertingThis ? '#555' : '#Eebb4d',
-                      color: '#0a0a0a',
-                      cursor: isInsertingThis ? 'wait' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    {isInsertingThis ? '⏳ Inserindo...' : '📄 Inserir no Documento'}
-                  </button>
+                  <div style={{ marginTop: theme.spacing.sm }}>
+                    <Button
+                      size="sm"
+                      variant={message.role === 'user' ? 'secondary' : 'secondary'}
+                      onClick={() => handleInsertText(message.id, message.content)}
+                      disabled={isInsertingThis}
+                      isLoading={isInsertingThis}
+                      fullWidth
+                    >
+                      Inserir no Documento
+                    </Button>
+                  </div>
                 )}
               </div>
-              <span style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>
+              <span style={{ fontSize: '10px', color: theme.colors.text.tertiary, marginTop: '4px' }}>
                 {formatTime(message.timestamp)}
               </span>
             </div>
@@ -574,33 +565,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         })}
 
         {sending && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '3px',
-              padding: '8px 12px',
-              background: '#1a1a1a',
-              borderRadius: '10px',
-              width: 'fit-content',
-            }}
-          >
-            <span className="typing-dot" style={{ animationDelay: '0ms' }} />
-            <span className="typing-dot" style={{ animationDelay: '150ms' }} />
-            <span className="typing-dot" style={{ animationDelay: '300ms' }} />
-            <style>{`
-              .typing-dot {
-                width: 5px;
-                height: 5px;
-                background: #Eebb4d;
-                border-radius: 50%;
-                animation: typing 1s infinite ease-in-out;
-              }
-              @keyframes typing {
-                0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
-                30% { opacity: 1; transform: scale(1); }
-              }
-            `}</style>
+          <div style={{ padding: '8px', background: theme.colors.surfaceHighlight, borderRadius: '12px', width: 'fit-content' }}>
+            <span style={{ fontSize: '12px', color: theme.colors.text.secondary }}>Digitando...</span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -608,32 +574,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* Sugestões */}
       {messages.length <= 1 && !pendingImage && (
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {quickSuggestions.map((suggestion) => (
-            <button
+            <Button
               key={suggestion}
+              size="sm"
+              variant="outline"
               onClick={() => setInput(suggestion)}
-              style={{
-                padding: '4px 8px',
-                fontSize: '10px',
-                border: '1px solid #333',
-                borderRadius: '12px',
-                background: 'transparent',
-                color: '#888',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = '#Eebb4d';
-                e.currentTarget.style.color = '#Eebb4d';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = '#333';
-                e.currentTarget.style.color = '#888';
-              }}
             >
               {suggestion}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -1219,6 +1169,34 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               >
                 📊 Criar Gráfico
               </button>
+              <button
+                onClick={() => {
+                  setShowProjectSelector(true);
+                  setShowImageMenu(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontSize: '11px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  borderTop: '1px solid #333',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                📚 Gerenciar Projetos
+              </button>
             </div>
           )}
         </div>
@@ -1279,7 +1257,78 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           {sending ? '...' : '→'}
         </button>
       </div>
-    </div>
+
+
+      {/* Modal de Projetos */}
+      {
+        showProjectSelector && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.8)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowProjectSelector(false);
+            }}
+          >
+            <div
+              style={{
+                background: '#0d0d0d',
+                borderRadius: '12px',
+                border: '1px solid #333',
+                width: '100%',
+                maxWidth: '400px',
+                maxHeight: '80vh',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #333',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#1a1a1a',
+                position: 'sticky',
+                top: 0
+              }}>
+                <span style={{ fontWeight: 600, color: '#fff' }}>Gerenciar Projetos</span>
+                <button
+                  onClick={() => setShowProjectSelector(false)}
+                  style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ padding: '16px' }}>
+                <ProjectSelector
+                  selectedProjectId={selectedProjectId || null}
+                  onProjectSelect={(id) => {
+                    onProjectSelect?.(id);
+                    // Opcional: fechar modal ao selecionar, ou manter aberto para gerenciar
+                  }}
+                  onProjectInfoChange={onProjectInfoChange}
+                  onMessage={(msg) => onFeedbackMessage?.(msg)}
+                  mode="modal"
+                />
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
 

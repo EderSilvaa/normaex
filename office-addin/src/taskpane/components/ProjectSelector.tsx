@@ -13,6 +13,7 @@ interface ProjectSelectorProps {
   onProjectSelect: (projectId: string | null) => void;
   onProjectInfoChange?: (info: { name: string; pdfCount: number } | null) => void;
   onMessage?: (message: string) => void;
+  mode?: 'inline' | 'modal';
 }
 
 const ProjectSelector: React.FC<ProjectSelectorProps> = ({
@@ -20,10 +21,11 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onProjectSelect,
   onProjectInfoChange,
   onMessage,
+  mode = 'inline',
 }) => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(mode === 'modal');
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [projectPDFs, setProjectPDFs] = useState<PDFSummary[]>([]);
@@ -167,32 +169,34 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
   return (
-    <div style={{ marginBottom: '12px' }}>
-      {/* Header com seleção */}
-      <div
-        onClick={() => setIsExpanded(!isExpanded)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 12px',
-          background: selectedProjectId ? '#1a2f1a' : '#1a1a1a',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          border: `1px solid ${selectedProjectId ? '#2d5a2d' : '#333'}`,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '14px' }}>📚</span>
-          <div>
-            <span style={{ fontSize: '12px', color: '#888' }}>Projeto: </span>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: selectedProjectId ? '#6fbf6f' : '#888' }}>
-              {selectedProject?.name || 'Nenhum selecionado'}
-            </span>
+    <div style={{ marginBottom: mode === 'modal' ? 0 : '12px' }}>
+      {/* Header com seleção - Apenas se não for modal ou se quisermos mostrar o atual */}
+      {mode === 'inline' && (
+        <div
+          onClick={() => setIsExpanded(!isExpanded)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            background: selectedProjectId ? '#1a2f1a' : '#1a1a1a',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            border: `1px solid ${selectedProjectId ? '#2d5a2d' : '#333'}`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px' }}>📚</span>
+            <div>
+              <span style={{ fontSize: '12px', color: '#888' }}>Projeto: </span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: selectedProjectId ? '#6fbf6f' : '#888' }}>
+                {selectedProject?.name || 'Nenhum selecionado'}
+              </span>
+            </div>
           </div>
+          <span style={{ fontSize: '10px', color: '#666' }}>{isExpanded ? '▲' : '▼'}</span>
         </div>
-        <span style={{ fontSize: '10px', color: '#666' }}>{isExpanded ? '▲' : '▼'}</span>
-      </div>
+      )}
 
       {/* Painel expandido */}
       {isExpanded && (

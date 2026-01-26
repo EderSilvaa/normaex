@@ -11,3 +11,4 @@ export { default as TabNavigation } from './TabNavigation';
 export { default as FormatControls } from './FormatControls';
 export { default as ProjectSelector } from './ProjectSelector';
 export { default as NormSelector } from './NormSelector';
+export { default as ResearchPanel } from './ResearchPanel';

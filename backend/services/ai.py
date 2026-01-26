@@ -330,3 +330,45 @@ def detect_write_intent(message: str) -> dict:
             "instruction": message,
             "position": "fim"
         }
+
+def suggest_structure(theme: str, work_type: str, knowledge_area: str, norm: str) -> str:
+    """
+    Gera uma sugestão de estrutura (sumário) baseada em projetos da área.
+    """
+    try:
+        model = get_model()
+        prompt = f"""
+        Atue como um orientador acadêmico sênior na área de {knowledge_area}.
+        Seu aluno vai escrever um(a) {work_type} sobre o tema: "{theme}".
+        A norma a ser seguida é: {norm.upper()}.
+
+        Com base na estrutura comum de projetos APROVADOS e de EXCELÊNCIA nesta área ({knowledge_area}),
+        Sugira uma estrutura de capítulos (Sumário) ideal.
+
+        Considere as particularidades da área:
+        - Direito: Foco em legislação, doutrina, jurisprudência.
+        - Engenharia: Foco em método, experimento, resultados.
+        - Saúde: Estrutura rígida (IMRAD), ética.
+        - Humanas: Revisão teórica profunda, contexto histórico.
+
+        Gere a saída no seguinte formato MARCKDOWN limpo:
+
+        # Sugestão de Estrutura para {work_type}
+        
+        ## 1. Introdução
+        - O que abordar: ...
+        - Dica: ...
+
+        ## 2. [Nome Sugerido para o Cap 2]
+        ...
+
+        (Continue para todos os capítulos necessários)
+
+        ## Dicas Específicas para {knowledge_area}
+        - ...
+        """
+
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"Erro ao gerar estrutura: {str(e)}"
