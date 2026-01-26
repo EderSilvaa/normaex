@@ -14,8 +14,10 @@ import ChatPanel from './ChatPanel';
 import TabNavigation from './TabNavigation';
 import FormatControls from './FormatControls';
 import ProjectSelector from './ProjectSelector';
+import NormSelector, { WorkConfig } from './NormSelector';
+import { getNormConfig, NormConfig } from '../../config/norms.config';
 
-type TabId = 'abnt' | 'chat';
+type TabId = 'abnt' | 'chat' | 'config';
 
 interface AppProps {
   title: string;
@@ -32,16 +34,44 @@ const App: React.FC<AppProps> = ({ title }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProjectInfo, setSelectedProjectInfo] = useState<{ name: string; pdfCount: number } | null>(null);
 
-  // Tabs: ABNT (análise + formatação), Chat (conversa + escrita + imagens)
+  // Configuração da norma selecionada
+  const [workConfig, setWorkConfig] = useState<WorkConfig>(() => {
+    // Tentar carregar do localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('normaex_work_config');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return { norm: 'abnt', area: 'outras', workType: 'tcc' };
+  });
+
+  const currentNormConfig: NormConfig = getNormConfig(workConfig.norm);
+
+  // Tabs: ABNT (análise + formatação), Chat (conversa + escrita + imagens), Config (configurações)
   const tabs = [
-    { id: 'abnt', label: 'ABNT', icon: '📋', badge: analysis?.issues.length },
+    { id: 'abnt', label: currentNormConfig.name, icon: currentNormConfig.icon, badge: analysis?.issues.length },
     { id: 'chat', label: 'Chat', icon: '💬' },
+    { id: 'config', label: 'Config', icon: '⚙️' },
   ];
 
   // Inicialização
   useEffect(() => {
     setIsOfficeInitialized(true);
     checkBackendStatus();
+  }, []);
+
+  // Salvar configuração quando mudar
+  const handleWorkConfigChange = useCallback((config: WorkConfig) => {
+    setWorkConfig(config);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('normaex_work_config', JSON.stringify(config));
+    }
+    setMessage(`Configuração salva: ${getNormConfig(config.norm).name}`);
   }, []);
 
   // Verificar status do backend
@@ -63,6 +93,12 @@ const App: React.FC<AppProps> = ({ title }) => {
     try {
       // Usar versão com margens para análise completa
       const content = await DocumentService.getDocumentContentWithMargins();
+
+      // Aplicar configuração selecionada
+      content.format_type = workConfig.norm;
+      if (!content.metadata) content.metadata = {};
+      content.metadata.work_type = workConfig.workType;
+      content.metadata.knowledge_area = workConfig.area;
 
       if (!content.full_text?.trim()) {
         setMessage('O documento está vazio. Adicione conteúdo para analisar.');
@@ -90,6 +126,9 @@ const App: React.FC<AppProps> = ({ title }) => {
       message: userMessage,
       context: content.full_text?.substring(0, 2000),
       project_id: selectedProjectId || undefined,
+      format_type: workConfig.norm,
+      work_type: workConfig.workType,
+      knowledge_area: workConfig.area,
     });
 
     return {
@@ -146,10 +185,10 @@ const App: React.FC<AppProps> = ({ title }) => {
     }
   }, [analyzeDocument]);
 
-  // Formatação automática ABNT
+  // Formatação automática
   const handleAutoFormat = useCallback(async () => {
     setIsLoading(true);
-    setMessage('Aplicando formatação ABNT...');
+    setMessage(`Aplicando formatação ${currentNormConfig.name}...`);
 
     try {
       const result = await DocumentService.applyABNTFormatting();
@@ -249,6 +288,7 @@ const App: React.FC<AppProps> = ({ title }) => {
               <FormatControls
                 onAutoFormat={handleAutoFormat}
                 isLoading={isLoading}
+                normName={currentNormConfig.name}
               />
             </div>
           </div>
@@ -275,6 +315,16 @@ const App: React.FC<AppProps> = ({ title }) => {
           </div>
         )}
 
+        {/* Tab: Config (Configurações de Norma) */}
+        {activeTab === 'config' && (
+          <div className="actions-section">
+            <NormSelector
+              currentConfig={workConfig}
+              onConfigChange={handleWorkConfigChange}
+            />
+          </div>
+        )}
+
         {/* Message Display */}
         {message && activeTab !== 'chat' && (
           <div className="message-box">
@@ -293,8 +343,8 @@ const App: React.FC<AppProps> = ({ title }) => {
               {backendStatus === 'online'
                 ? 'Conectado'
                 : backendStatus === 'checking'
-                ? 'Verificando...'
-                : 'Desconectado'}
+                  ? 'Verificando...'
+                  : 'Desconectado'}
             </span>
           </div>
           <div className="status-item">

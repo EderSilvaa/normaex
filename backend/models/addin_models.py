@@ -14,6 +14,9 @@ from enum import Enum
 
 class FormatType(str, Enum):
     ABNT = "abnt"
+    APA = "apa"
+    VANCOUVER = "vancouver"
+    IEEE = "ieee"
     JURIDICO = "juridico"
     PROFISSIONAL = "profissional"
 
@@ -138,6 +141,8 @@ class WriteRequest(BaseModel):
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
     max_words: Optional[int] = Field(None, description="Limite de palavras")
     tone: Optional[str] = Field("academico", description="Tom do texto: academico, formal, tecnico")
+    work_type: Optional[str] = Field(None, description="Tipo de trabalho: tcc, artigo...")
+    knowledge_area: Optional[str] = Field(None, description="Área: psicologia, direito...")
 
 
 class WriteChunk(BaseModel):
@@ -164,6 +169,9 @@ class ChatRequest(BaseModel):
     context: Optional[str] = Field(None, description="Contexto do documento (texto selecionado ou documento completo)")
     history: Optional[List[Dict[str, str]]] = Field(default_factory=list, description="Histórico de mensagens")
     project_id: Optional[str] = Field(None, description="ID do projeto para incluir contexto de PDFs")
+    format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
+    work_type: Optional[str] = Field(None, description="Tipo de trabalho: tcc, artigo...")
+    knowledge_area: Optional[str] = Field(None, description="Área: psicologia, direito...")
 
 
 class ContextInfo(BaseModel):

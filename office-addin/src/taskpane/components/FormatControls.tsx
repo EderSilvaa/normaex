@@ -8,6 +8,7 @@ import { useState } from 'react';
 interface FormatControlsProps {
   onAutoFormat: () => Promise<void>;
   isLoading?: boolean;
+  normName?: string;
 }
 
 interface FormatResult {
@@ -18,6 +19,7 @@ interface FormatResult {
 const FormatControls: React.FC<FormatControlsProps> = ({
   onAutoFormat,
   isLoading = false,
+  normName = 'ABNT',
 }) => {
   const [result, setResult] = useState<FormatResult | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -30,7 +32,7 @@ const FormatControls: React.FC<FormatControlsProps> = ({
       await onAutoFormat();
       setResult({
         success: true,
-        message: 'Formatação ABNT aplicada!',
+        message: `Formatação ${normName} aplicada!`,
       });
     } catch (error) {
       setResult({
@@ -69,7 +71,7 @@ const FormatControls: React.FC<FormatControlsProps> = ({
           transition: 'all 0.2s',
         }}
       >
-        {processing ? 'Formatando...' : 'Aplicar Formatação ABNT'}
+        {processing ? 'Formatando...' : `Aplicar Formatação ${normName}`}
       </button>
 
       {/* Resultado */}

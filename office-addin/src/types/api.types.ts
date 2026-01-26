@@ -7,7 +7,7 @@
 // ENUMS
 // ============================================
 
-export type FormatType = 'abnt' | 'juridico' | 'profissional';
+export type FormatType = 'abnt' | 'apa' | 'vancouver' | 'ieee' | 'juridico' | 'profissional';
 
 export type SectionType =
   | 'introducao'
@@ -137,6 +137,9 @@ export interface ChatRequest {
   context?: string;
   history?: Array<{ role: string; content: string }>;
   project_id?: string;
+  format_type?: FormatType;
+  work_type?: string;
+  knowledge_area?: string;
 }
 
 export interface ContextInfo {

@@ -466,11 +466,14 @@ Tom: {request.tone or 'academico'}
 Formato: {request.format_type.value}
 {f'Limite: aproximadamente {request.max_words} palavras.' if request.max_words else ''}"""
 
-            # Usar o serviço de streaming com os 3 argumentos corretos
+            # Usar o serviço de streaming com os argumentos corretos
             async for chunk in generate_academic_text_stream(
                 document_context=context,
                 instruction=instruction,
-                section_type=request.section_type.value
+                section_type=request.section_type.value,
+                format_type=request.format_type.value,
+                knowledge_area=request.knowledge_area or 'geral',
+                work_type=request.work_type or 'acadêmico'
             ):
                 if chunk:
                     yield json.dumps({
@@ -511,7 +514,10 @@ async def write_text(request: WriteRequest):
         text = generate_academic_text(
             document_context=context,
             instruction=request.instruction,
-            section_type=request.section_type.value
+            section_type=request.section_type.value,
+            format_type=request.format_type.value,
+            knowledge_area=request.knowledge_area or 'geral',
+            work_type=request.work_type or 'acadêmico'
         )
         word_count = len(text.split())
 
@@ -630,10 +636,14 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             # Modo de escrita: gerar texto acadêmico usando contexto expandido
             # Usar mais contexto quando há PDFs de referência
             context_limit = 20000 if has_pdf_context else 2000
+            
             generated_text = generate_academic_text(
                 document_context=context[:context_limit],
                 instruction=instruction,
-                section_type=section_type
+                section_type=section_type,
+                format_type=request.format_type.value,
+                knowledge_area=request.knowledge_area or 'geral',
+                work_type=request.work_type or 'acadêmico'
             )
 
             word_count = len(generated_text.split())
@@ -641,28 +651,27 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             # Resposta formatada com indicação de que usou os documentos
             docs_note = ""
             if has_pdf_context and pdf_info:
-                docs_note = f"\n📚 *Baseado em {pdf_info.get('pdf_count', 0)} documento(s) de referência*\n"
+                docs_note = f"📚 *Baseado em {pdf_info.get('pdf_count', 0)} documento(s) de referência*"
 
-            response = f"""📝 **Texto gerado ({word_count} palavras):**
-{docs_note}
-{generated_text}
+            response_msg = f"**Texto gerado com IA ({section_type}):**\n{docs_note}\n\n{generated_text}\n\n---\n*Para inserir, clique no botão.*"
+            
+            return ChatResponse(
+                message=response_msg,
+                context_info=context_info
+            )
 
----
-💡 *Para inserir no documento, copie o texto acima ou peça ajustes.*"""
-
-            suggestions = [
-                "Expandir este texto",
-                "Reescrever de forma mais formal",
-                "Adicionar mais detalhes"
-            ]
         else:
-            # Modo chat normal
-            response = chat_with_document(
-                document_text=context,
-                user_message=request.message
+            # Modo chat normal (Assistente)
+            response_text = chat_with_document(
+                document_text=context, 
+                user_message=request.message,
+                format_type=request.format_type.value,
+                knowledge_area=request.knowledge_area or 'geral',
+                work_type=request.work_type or 'acadêmico'
             )
 
             # Sugestões contextualizadas
+            suggestions = []
             if has_pdf_context:
                 suggestions = [
                     "Escreva uma introdução baseada nos documentos",
@@ -673,14 +682,14 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 suggestions = [
                     "Escreva uma introdução",
                     "Como melhorar a estrutura?",
-                    "Verifique a formatação ABNT"
+                    f"Verifique a formatação {request.format_type.value.upper()}"
                 ]
 
-        return ChatResponse(
-            message=response,
-            suggestions=suggestions,
-            context_info=context_info
-        )
+            return ChatResponse(
+                message=response_text,
+                suggestions=suggestions,
+                context_info=context_info
+            )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro no chat: {str(e)}")

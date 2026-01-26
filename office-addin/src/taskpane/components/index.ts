@@ -9,3 +9,5 @@ export { default as ChatPanel } from './ChatPanel';
 export { default as WritingAssistant } from './WritingAssistant';
 export { default as TabNavigation } from './TabNavigation';
 export { default as FormatControls } from './FormatControls';
+export { default as ProjectSelector } from './ProjectSelector';
+export { default as NormSelector } from './NormSelector';

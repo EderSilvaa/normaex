@@ -42,12 +42,21 @@ def organize_references_ai(text_content: str) -> str:
         return text_content
 
 
-def chat_with_document(document_text: str, user_message: str) -> str:
+def chat_with_document(
+    document_text: str, 
+    user_message: str,
+    format_type: str = "abnt",
+    knowledge_area: str = "geral",
+    work_type: str = "acadêmico"
+) -> str:
     try:
         model = get_model()
         # Aumentado limite para 150.000 caracteres (~50-60 páginas de documento acadêmico)
         prompt = f"""
-        Você é um assistente acadêmico especializado em ABNT e escrita científica.
+        Você é um assistente acadêmico especializado em normas {format_type.upper()} e escrita científica.
+        Área: {knowledge_area}
+        Tipo: {work_type}
+        
         O usuário enviou um documento (TCC/Artigo). Use o conteúdo abaixo como contexto para responder.
 
         CONTEXTO DO DOCUMENTO:
@@ -57,6 +66,7 @@ def chat_with_document(document_text: str, user_message: str) -> str:
         {user_message}
 
         Responda de forma útil, direta e em português. Use APENAS informações do documento acima.
+        Se for sobre formatação, use as regras da norma {format_type.upper()}.
         """
 
         response = model.generate_content(prompt)
@@ -65,9 +75,48 @@ def chat_with_document(document_text: str, user_message: str) -> str:
         return f"Erro ao processar mensagem: {str(e)}"
 
 
-def generate_academic_text(document_context: str, instruction: str, section_type: str) -> str:
+def get_norm_rules(format_type: str) -> str:
+    """Retorna regras específicas de escrita para cada norma"""
+    rules = {
+        "apa": """
+        1. Use linguagem objetiva e precisa
+        2. Citações: (Sobrenome, Ano) - ex: (Silva, 2024)
+        3. Foco em clareza e redução de viés
+        4. Evite adjetivos desnecessários
+        5. Use voz ativa quando possível
+        """,
+        "vancouver": """
+        1. Linguagem extremamente concisa e técnica
+        2. Citações numéricas: [1] ou (1)
+        3. Priorize dados e evidências
+        4. Estrutura IMRAD (Introdução, Métodos, Resultados, Discussão)
+        """,
+        "ieee": """
+        1. Linguagem técnica e direta
+        2. Citações numéricas entre colchetes: [1]
+        3. Foco em implementação e resultados
+        4. Use terminologia técnica precisa da área
+        """,
+        "abnt": """
+        1. Use linguagem formal, impessoal e objetiva
+        2. Parágrafos com no mínimo 3-4 frases
+        3. Use conectivos para ligar ideias (Além disso, Portanto...)
+        4. Se citar autores, use o formato: Sobrenome (ANO) ou (SOBRENOME, ANO)
+        5. Evite gírias, coloquialismos e primeira pessoa do singular
+        """
+    }
+    return rules.get(format_type.lower(), rules["abnt"])
+
+def generate_academic_text(
+    document_context: str, 
+    instruction: str, 
+    section_type: str,
+    format_type: str = "abnt",
+    knowledge_area: str = "geral",
+    work_type: str = "acadêmico"
+) -> str:
     """
-    Gera texto acadêmico seguindo normas ABNT baseado no contexto do documento.
+    Gera texto acadêmico seguindo normas especificadas baseado no contexto do documento.
     """
     try:
         model = get_model()
@@ -83,7 +132,7 @@ def generate_academic_text(document_context: str, instruction: str, section_type
             "desenvolvimento": """
                 - Desenvolva os argumentos de forma lógica e coesa
                 - Use parágrafos bem estruturados (tópico frasal + desenvolvimento + conclusão)
-                - Cite autores relevantes quando necessário (use formato: Autor (ANO))
+                - Cite autores relevantes quando necessário
                 - Mantenha linguagem formal e impessoal
                 - Conecte as ideias com palavras de transição
             """,
@@ -117,9 +166,12 @@ def generate_academic_text(document_context: str, instruction: str, section_type
         }
 
         guidelines = section_guidelines.get(section_type.lower(), section_guidelines["geral"])
+        norm_rules = get_norm_rules(format_type)
 
         prompt = f"""
-        Você é um especialista em escrita acadêmica e normas ABNT.
+        Você é um especialista em escrita acadêmica seguindo normas {format_type.upper()}.
+        Área de Conhecimento: {knowledge_area}
+        Tipo de Trabalho: {work_type}
 
         CONTEXTO DO DOCUMENTO DO USUÁRIO:
         {document_context[:20000]}
@@ -132,13 +184,12 @@ def generate_academic_text(document_context: str, instruction: str, section_type
         DIRETRIZES PARA ESTA SEÇÃO:
         {guidelines}
 
-        REGRAS OBRIGATÓRIAS (ABNT):
-        1. Use linguagem formal, impessoal e objetiva
-        2. Parágrafos com no mínimo 3-4 frases
-        3. Use conectivos para ligar ideias (Além disso, Portanto, Contudo, Nesse sentido...)
-        4. Se citar autores, use o formato: Sobrenome (ANO) ou (SOBRENOME, ANO)
-        5. Evite gírias, coloquialismos e primeira pessoa do singular
-        6. Mantenha coerência com o restante do documento
+        REGRAS DE FORMATAÇÃO ({format_type.upper()}):
+        {norm_rules}
+        
+        REGRAS ADICIONAIS:
+        1. Mantenha coerência com o restante do documento
+        2. Adapte o tom para a área de {knowledge_area}
 
         IMPORTANTE:
         - Retorne APENAS o texto gerado, sem explicações ou comentários
@@ -154,7 +205,14 @@ def generate_academic_text(document_context: str, instruction: str, section_type
         return f"Erro ao gerar texto: {str(e)}"
 
 
-async def generate_academic_text_stream(document_context: str, instruction: str, section_type: str):
+async def generate_academic_text_stream(
+    document_context: str, 
+    instruction: str, 
+    section_type: str,
+    format_type: str = "abnt",
+    knowledge_area: str = "geral",
+    work_type: str = "acadêmico"
+):
     """
     Gera texto acadêmico com streaming para feedback em tempo real.
     """
@@ -197,9 +255,12 @@ async def generate_academic_text_stream(document_context: str, instruction: str,
     }
 
     guidelines = section_guidelines.get(section_type.lower(), section_guidelines["geral"])
+    norm_rules = get_norm_rules(format_type)
 
     prompt = f"""
-    Você é um especialista em escrita acadêmica e normas ABNT.
+    Você é um especialista em escrita acadêmica seguindo normas {format_type.upper()}.
+    Área: {knowledge_area}
+    Tipo: {work_type}
 
     CONTEXTO DO DOCUMENTO:
     {document_context[:15000]}
@@ -211,12 +272,8 @@ async def generate_academic_text_stream(document_context: str, instruction: str,
     DIRETRIZES:
     {guidelines}
 
-    REGRAS ABNT:
-    1. Linguagem formal, impessoal e objetiva
-    2. Parágrafos com no mínimo 3-4 frases
-    3. Use conectivos (Além disso, Portanto, Contudo...)
-    4. Citações: Sobrenome (ANO) ou (SOBRENOME, ANO)
-    5. Evite gírias e primeira pessoa
+    REGRAS DE FORMATAÇÃO ({format_type.upper()}):
+    {norm_rules}
 
     Retorne APENAS o texto gerado, sem explicações.
     """
