@@ -115,6 +115,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   });
   const [chartPreview, setChartPreview] = useState<string | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -314,14 +315,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   // Gerar preview do gráfico
   const handleGenerateChartPreview = async () => {
+    setChartError(null);
+
     const labels = chartConfig.labels.split(',').map(l => l.trim()).filter(Boolean);
     const values = chartConfig.values.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
 
     if (labels.length < 2 || values.length < 2) {
+      setChartError('Insira pelo menos 2 rótulos e 2 valores separados por vírgula.');
       return;
     }
 
     if (labels.length !== values.length) {
+      setChartError(`Quantidade diferente: ${labels.length} rótulos e ${values.length} valores.`);
       return;
     }
 
@@ -338,9 +343,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       if (response.success && response.base64) {
         setChartPreview(response.base64);
+        setChartError(null);
+      } else {
+        setChartError(response.error || 'Erro desconhecido ao gerar gráfico.');
       }
     } catch (error) {
       console.error('Erro ao gerar preview:', error);
+      setChartError(error instanceof Error ? error.message : 'Erro de conexão com o servidor.');
     } finally {
       setChartLoading(false);
     }
@@ -395,6 +404,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const handleCancelChart = () => {
     setShowChartBuilder(false);
     setChartPreview(null);
+    setChartError(null);
     setChartConfig({
       type: 'bar',
       title: '',
@@ -1019,6 +1029,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               }}
             />
           </div>
+
+          {/* Erro */}
+          {chartError && (
+            <div style={{
+              marginBottom: '10px',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#ef4444',
+              fontSize: '11px',
+            }}>
+              ⚠️ {chartError}
+            </div>
+          )}
 
           {/* Preview */}
           {chartPreview && (
