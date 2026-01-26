@@ -17,13 +17,17 @@ interface ResearchPanelProps {
     workType?: string;
     knowledgeArea?: string;
     onInsertReference?: (text: string) => void;
+    onStructureGenerated?: (structure: string) => void;
+    mode?: 'inline' | 'modal';
 }
 
 const ResearchPanel: React.FC<ResearchPanelProps> = ({
     normName,
     workType = 'trabalho',
     knowledgeArea = 'geral',
-    onInsertReference
+    onInsertReference,
+    onStructureGenerated,
+    mode = 'inline'
 }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
@@ -50,7 +54,12 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
                 work_type: workType,
                 knowledge_area: knowledgeArea
             });
-            setGeneratedStructure(response.structure);
+
+            if (onStructureGenerated) {
+                onStructureGenerated(response.structure);
+            } else {
+                setGeneratedStructure(response.structure);
+            }
         } catch (err) {
             console.error('Erro detalhado:', err);
             setError('Erro ao gerar estrutura. Verifique o console.');
@@ -105,7 +114,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: theme.spacing.md, gap: theme.spacing.md }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: mode === 'modal' ? 0 : theme.spacing.md, gap: theme.spacing.md }}>
             <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'flex-end' }}>
                 <Input
                     placeholder={`Tema do ${workType} (${normName})...`}

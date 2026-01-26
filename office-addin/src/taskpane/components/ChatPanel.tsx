@@ -12,6 +12,7 @@ import { Input } from './ui/Input';
 import { Card } from './ui/Card';
 
 import ProjectSelector from './ProjectSelector';
+import ResearchPanel from './ResearchPanel';
 import { theme } from '../../styles/theme';
 
 interface ChartConfig {
@@ -76,6 +77,9 @@ interface ChatPanelProps {
   onProjectSelect?: (projectId: string | null) => void;
   onProjectInfoChange?: (info: { name: string; pdfCount: number } | null) => void;
   onFeedbackMessage?: (message: string) => void;
+  normName?: string;
+  workType?: string;
+  knowledgeArea?: string;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -90,6 +94,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onProjectSelect,
   onProjectInfoChange,
   onFeedbackMessage,
+  normName,
+  workType,
+  knowledgeArea,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -109,6 +116,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   // Estados para imagens
   const [showImageMenu, setShowImageMenu] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [showResearchModal, setShowResearchModal] = useState(false);
   const [showImageSearch, setShowImageSearch] = useState(false);
   const [pendingImage, setPendingImage] = useState<ImageAttachment | null>(null);
   const [imageCaption, setImageCaption] = useState('');
@@ -1171,6 +1179,34 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               </button>
               <button
                 onClick={() => {
+                  setShowResearchModal(true);
+                  setShowImageMenu(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#fff',
+                  fontSize: '11px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  borderTop: '1px solid #333',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                🔍 Pesquisa Acadêmica
+              </button>
+              <button
+                onClick={() => {
                   setShowProjectSelector(true);
                   setShowImageMenu(false);
                 }}
@@ -1328,6 +1364,85 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           </div>
         )
       }
+
+      {/* Modal de Pesquisa */}
+      {showResearchModal && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '20px',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowResearchModal(false);
+          }}
+        >
+          <div
+            style={{
+              background: '#0d0d0d',
+              borderRadius: '12px',
+              border: '1px solid #333',
+              width: '100%',
+              maxWidth: '400px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid #333',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: '#1a1a1a',
+              position: 'sticky',
+              top: 0,
+              zIndex: 10
+            }}>
+              <span style={{ fontWeight: 600, color: '#fff' }}>Pesquisa Acadêmica</span>
+              <button
+                onClick={() => setShowResearchModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <ResearchPanel
+                normName={normName || 'ABNT'}
+                workType={workType}
+                knowledgeArea={knowledgeArea}
+                onInsertReference={(text) => {
+                  onInsertText?.(text);
+                  setShowResearchModal(false); // Opcional: fechar após inserir
+                }}
+                onStructureGenerated={(structure) => {
+                  setShowResearchModal(false);
+                  const newMessage: Message = {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: `💡 **Sugestão de Estrutura:**\n\n${structure}`,
+                    timestamp: new Date(),
+                  };
+                  setMessages((prev) => [...prev, newMessage]);
+                }}
+                mode="modal"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 };

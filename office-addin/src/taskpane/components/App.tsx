@@ -17,10 +17,11 @@ import ChatPanel from './ChatPanel';
 import TabNavigation from './TabNavigation';
 import FormatControls from './FormatControls';
 import NormSelector, { WorkConfig } from './NormSelector';
-import ResearchPanel from './ResearchPanel';
+import ProjectSelector from './ProjectSelector';
+
 import { getNormConfig, NormConfig } from '../../config/norms.config';
 
-type TabId = 'abnt' | 'chat' | 'config' | 'research';
+type TabId = 'abnt' | 'chat';
 
 interface AppProps {
   title: string;
@@ -36,6 +37,7 @@ const App: React.FC<AppProps> = ({ title }) => {
   const [activeTab, setActiveTab] = useState<TabId>('abnt');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProjectInfo, setSelectedProjectInfo] = useState<{ name: string; pdfCount: number } | null>(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   // Configuração da norma selecionada
   const [workConfig, setWorkConfig] = useState<WorkConfig>(() => {
@@ -58,9 +60,9 @@ const App: React.FC<AppProps> = ({ title }) => {
   // Tabs: ABNT (análise + formatação), Chat (conversa + escrita + imagens), Config (configurações)
   const tabs = [
     { id: 'abnt', label: currentNormConfig.name, icon: currentNormConfig.icon, badge: analysis?.issues.length },
+
     { id: 'chat', label: 'Chat', icon: '💬' },
-    { id: 'research', label: 'Busca', icon: '🔍' },
-    { id: 'config', label: 'Config', icon: '⚙️' },
+
   ];
 
   // Inicialização
@@ -234,21 +236,7 @@ const App: React.FC<AppProps> = ({ title }) => {
       {/* Main Content */}
       <main className="app-main" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', paddingBottom: '10px', paddingTop: '16px' }}>
 
-        {/* Score Display */}
-        {analysis && activeTab === 'abnt' && (
-          <div style={{ flexShrink: 0, padding: `0 ${theme.spacing.md}` }}>
-            <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
-              <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
-                <ComplianceScore
-                  score={analysis.score}
-                  issueCount={analysis.issues.length}
-                  size="medium"
-                  animate={true}
-                />
-              </div>
-            </Card>
-          </div>
-        )}
+
 
         {/* Tabs */}
         <div style={{ marginBottom: '16px', flexShrink: 0 }}>
@@ -276,6 +264,21 @@ const App: React.FC<AppProps> = ({ title }) => {
               >
                 Analisar Documento
               </Button>
+
+              {analysis && (
+                <div style={{ marginTop: theme.spacing.md }}>
+                  <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
+                    <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
+                      <ComplianceScore
+                        score={analysis.score}
+                        issueCount={analysis.issues.length}
+                        size="medium"
+                        animate={true}
+                      />
+                    </div>
+                  </Card>
+                </div>
+              )}
 
               {message && (
                 <div style={{
@@ -325,31 +328,16 @@ const App: React.FC<AppProps> = ({ title }) => {
                 onProjectSelect={setSelectedProjectId}
                 onProjectInfoChange={setSelectedProjectInfo}
                 onFeedbackMessage={setMessage}
-              />
-            </div>
-          )}
-
-          {/* Tab: Research */}
-          {activeTab === 'research' && (
-            <div className="actions-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <ResearchPanel
                 normName={currentNormConfig.name}
                 workType={workConfig.workType}
                 knowledgeArea={workConfig.area}
-                onInsertReference={handleInsertTextFromChat}
               />
             </div>
           )}
 
-          {/* Tab: Config */}
-          {activeTab === 'config' && (
-            <div className="actions-section">
-              <NormSelector
-                currentConfig={workConfig}
-                onConfigChange={handleWorkConfigChange}
-              />
-            </div>
-          )}
+
+
+
         </div>
 
 
@@ -383,11 +371,81 @@ const App: React.FC<AppProps> = ({ title }) => {
             <span>Word API</span>
           </div>
         </div>
-        <div>
-          Normaex AI
+
+        <div
+          onClick={() => setShowConfigModal(true)}
+          style={{ cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}
+          title="Configurações"
+        >
+          ⚙️
         </div>
-      </footer>
-    </div>
+      </footer >
+
+      {/* Modal de Configuração */}
+      {
+        showConfigModal && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.8)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowConfigModal(false);
+            }}
+          >
+            <div
+              style={{
+                background: '#0d0d0d',
+                borderRadius: '12px',
+                border: '1px solid #333',
+                width: '100%',
+                maxWidth: '400px',
+                maxHeight: '80vh',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #333',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#1a1a1a',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10
+              }}>
+                <span style={{ fontWeight: 600, color: '#fff' }}>Configurações</span>
+                <button
+                  onClick={() => setShowConfigModal(false)}
+                  style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ padding: '16px' }}>
+                <NormSelector
+                  currentConfig={workConfig}
+                  onConfigChange={handleWorkConfigChange}
+                />
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
 
