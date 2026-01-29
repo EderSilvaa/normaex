@@ -2,31 +2,118 @@
 <OfficeApp
   xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
 
+  <!-- ============================================ -->
+  <!-- INFORMAÇÕES BÁSICAS (DEV LOCAL)              -->
+  <!-- ============================================ -->
+
+  <!-- ID deve ser o mesmo para upgrade/cache funcionar corretamente -->
   <Id>f9d10b7b-3b54-4e35-91a6-3cfb1cba7542</Id>
+  
   <Version>1.0.0.0</Version>
   <ProviderName>Normaex</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Normaex AI"/>
-  <Description DefaultValue="AI Assistant for ABNT formatting and academic writing"/>
+  
+  <DisplayName DefaultValue="Normaex (DEV)"/>
+  <Description DefaultValue="[DEV] Assistente de IA para formatação ABNT e escrita acadêmica."/>
+  
+  <!-- URLs Apontando para LOCALHOST -->
   <IconUrl DefaultValue="https://localhost:3001/assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="https://localhost:3001/assets/icon-128.png"/>
-  <SupportUrl DefaultValue="https://localhost:3001"/>
+  <SupportUrl DefaultValue="https://localhost:3001/suporte"/>
 
   <AppDomains>
     <AppDomain>https://localhost:3001</AppDomain>
-    <AppDomain>https://localhost:8080</AppDomain>
+    <AppDomain>https://localhost:8000</AppDomain> <!-- Backend Local -->
   </AppDomains>
 
   <Hosts>
     <Host Name="Document"/>
   </Hosts>
 
+  <Requirements>
+    <Sets>
+      <Set Name="WordApi" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+
   <DefaultSettings>
     <SourceLocation DefaultValue="https://localhost:3001/taskpane.html"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
+
+  <!-- ============================================ -->
+  <!-- VERSION OVERRIDES (Onde vive o Ribbon)       -->
+  <!-- ============================================ -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneAppVersionOverridesV1_0">
+
+    <Description resid="residDescription"/>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="https://localhost:3001/assets/icon-16.png"/>
+        <bt:Image id="icon32" DefaultValue="https://localhost:3001/assets/icon-32.png"/>
+        <bt:Image id="icon64" DefaultValue="https://localhost:3001/assets/icon-64.png"/>
+        <bt:Image id="icon80" DefaultValue="https://localhost:3001/assets/icon-80.png"/>
+      </bt:Images>
+
+      <bt:Urls>
+        <bt:Url id="residTaskpaneUrl" DefaultValue="https://localhost:3001/taskpane.html"/>
+        <bt:Url id="residSupportUrl" DefaultValue="https://localhost:3001/suporte"/>
+      </bt:Urls>
+
+      <bt:ShortStrings>
+        <bt:String id="residLabel" DefaultValue="Normaex AI (Dev)"/>
+        <bt:String id="residGroupLabel" DefaultValue="Formatação ABNT"/>
+        <bt:String id="residButtonLabel" DefaultValue="Abrir Normaex"/>
+      </bt:ShortStrings>
+
+      <bt:LongStrings>
+        <bt:String id="residDescription" DefaultValue="Normaex é o assistente de IA definitivo para estudantes universitários brasileiros. Formate automaticamente seu TCC, monografia ou artigo científico conforme as normas ABNT."/>
+        <bt:String id="residTooltip" DefaultValue="Clique para abrir o assistente Normaex (Versão Dev)"/>
+      </bt:LongStrings>
+    </Resources>
+
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="NormaexGroup">
+                <Label resid="residGroupLabel"/>
+                <Icon>
+                  <bt:Image size="16" resid="icon16"/>
+                  <bt:Image size="32" resid="icon32"/>
+                  <bt:Image size="80" resid="icon80"/>
+                </Icon>
+
+                <Control xsi:type="Button" id="NormaexButton">
+                  <Label resid="residButtonLabel"/>
+                  <Supertip>
+                    <Title resid="residLabel"/>
+                    <Description resid="residTooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16"/>
+                    <bt:Image size="32" resid="icon32"/>
+                    <bt:Image size="80" resid="icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>NormaexTaskpane</TaskpaneId>
+                    <SourceLocation resid="residTaskpaneUrl"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+  </VersionOverrides>
 
 </OfficeApp>

@@ -11,3 +11,5 @@ sse-starlette
 docx2pdf
 httpx
 matplotlib
+slowapi
+python-dotenv

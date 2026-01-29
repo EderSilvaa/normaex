@@ -60,16 +60,9 @@ module.exports = (env, argv) => {
           },
           // Páginas estáticas (privacidade, termos, suporte)
           {
-            from: 'src/taskpane/privacy.html',
-            to: 'privacy.html'
-          },
-          {
-            from: 'src/taskpane/terms.html',
-            to: 'terms.html'
-          },
-          {
-            from: 'src/taskpane/support.html',
-            to: 'support.html'
+            from: 'src/pages',
+            to: '',
+            noErrorOnMissing: true
           }
         ]
       })

@@ -35,6 +35,9 @@
   <!-- URL de suporte (obrigatório para AppSource) -->
   <SupportUrl DefaultValue="https://normaex.com.br/suporte"/>
 
+  <!-- Política de Privacidade (obrigatório para AppSource) -->
+  <!-- IMPORTANTE: Esta URL deve estar acessível antes da submissão -->
+
   <!-- ============================================ -->
   <!-- DOMÍNIOS PERMITIDOS                          -->
   <!-- ============================================ -->
@@ -100,6 +103,8 @@
       <bt:Urls>
         <bt:Url id="residTaskpaneUrl" DefaultValue="https://normaex.com.br/taskpane.html"/>
         <bt:Url id="residSupportUrl" DefaultValue="https://normaex.com.br/suporte"/>
+        <bt:Url id="residPrivacyUrl" DefaultValue="https://normaex.com.br/privacy.html"/>
+        <bt:Url id="residTermsUrl" DefaultValue="https://normaex.com.br/terms.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>

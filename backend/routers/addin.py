@@ -3,7 +3,7 @@ Router para endpoints do Office Add-in
 Esses endpoints recebem conteúdo JSON diretamente (não arquivos)
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 import httpx
 import base64
@@ -12,6 +12,10 @@ from typing import AsyncGenerator
 import json
 import asyncio
 import re
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 from models.addin_models import (
     DocumentContent,
@@ -447,13 +451,15 @@ async def format_content(content: DocumentContent):
 # ============================================
 
 @router.post("/write-stream")
-async def write_stream(request: WriteRequest):
+@limiter.limit("10/minute")
+async def write_stream(request: WriteRequest, req: Request):
     """
     Gera texto acadêmico via streaming (Server-Sent Events).
 
     - Recebe instrução do usuário
     - Gera texto em chunks
     - Retorna via SSE para inserção gradual no Word
+    - Rate limit: 10 requisições por minuto
     """
 
     async def generate_stream() -> AsyncGenerator[str, None]:
@@ -582,7 +588,8 @@ def detect_write_intent(message: str) -> tuple[bool, str, str]:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+@limiter.limit("20/minute")
+async def chat(request: ChatRequest, req: Request):
     """
     Chat contextualizado com o documento.
     Detecta automaticamente quando o usuário quer gerar texto.
@@ -591,6 +598,7 @@ async def chat(request: ChatRequest):
     - Se project_id fornecido, inclui contexto dos PDFs do projeto
     - Se detectar intenção de escrita, gera o texto
     - Caso contrário, responde como assistente
+    - Rate limit: 20 requisições por minuto
     """
     try:
         context = request.context or "Documento sem conteúdo fornecido."
@@ -662,12 +670,18 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 
         else:
             # Modo chat normal (Assistente)
+            # Passar objetos de memória (converter Pydantic para dict se necessário)
+            proj_mem_dict = request.project_memory.dict() if request.project_memory else None
+            
             response_text = chat_with_document(
                 document_text=context, 
                 user_message=request.message,
                 format_type=request.format_type.value,
                 knowledge_area=request.knowledge_area or 'geral',
-                work_type=request.work_type or 'acadêmico'
+                work_type=request.work_type or 'acadêmico',
+                history=request.history,
+                project_memory=proj_mem_dict,
+                events=request.events
             )
 
             # Sugestões contextualizadas

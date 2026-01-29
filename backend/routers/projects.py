@@ -164,11 +164,12 @@ async def upload_pdf(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
 
-    # Ler conteúdo
+    # Ler conteúdo (limite de 10MB para evitar abusos)
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     try:
         content = await file.read()
-        if len(content) > 50 * 1024 * 1024:  # 50MB limite
-            raise HTTPException(status_code=400, detail="Arquivo muito grande (máx 50MB)")
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="Arquivo muito grande (máximo 10MB)")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {e}")
 

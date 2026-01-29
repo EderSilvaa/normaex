@@ -1,4 +1,5 @@
 import os
+import sys
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -6,13 +7,22 @@ load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-if API_KEY:
+# Validação no startup - falha rápido se não configurado
+if not API_KEY:
+    print("=" * 60)
+    print("ERRO CRÍTICO: GEMINI_API_KEY não configurada!")
+    print("Configure a variável de ambiente ou crie um arquivo .env")
+    print("Exemplo: GEMINI_API_KEY=sua_chave_aqui")
+    print("=" * 60)
+    # Em produção, descomentar para forçar falha:
+    # sys.exit(1)
+else:
     genai.configure(api_key=API_KEY)
+    print("[OK] Gemini API configurada com sucesso")
 
 def get_model():
     if not API_KEY:
-        raise Exception("GEMINI_API_KEY not found in environment variables.")
-    # Usar gemini-2.5-flash que está disponível e é rápido
+        raise Exception("GEMINI_API_KEY não configurada. Verifique seu arquivo .env")
     return genai.GenerativeModel('gemini-2.5-flash')
 
 
@@ -47,26 +57,68 @@ def chat_with_document(
     user_message: str,
     format_type: str = "abnt",
     knowledge_area: str = "geral",
-    work_type: str = "acadêmico"
+    work_type: str = "acadêmico",
+    history: list = None,
+    project_memory: dict = None,
+    events: list = None
 ) -> str:
     try:
         model = get_model()
-        # Aumentado limite para 150.000 caracteres (~50-60 páginas de documento acadêmico)
+        
+        # Construir Prompt Rico com Contexto
+        
+        # 1. Memória do Projeto (Estrutura e Referências)
+        memory_context = ""
+        if project_memory:
+            structure = project_memory.get('structure', '')
+            saved_refs = project_memory.get('saved_references', [])
+            
+            if structure:
+                memory_context += f"\n[ESTRUTURA DO PROJETO]\n{structure}\n"
+            
+            if saved_refs:
+                refs_text = "\n".join([f"- {r.get('citation', '')}: {r.get('title', '')}" for r in saved_refs])
+                memory_context += f"\n[REFERÊNCIAS JÁ SELECIONADAS PELO USUÁRIO]\n{refs_text}\n(Priorize usar essas referências quando pertinente)\n"
+
+        # 2. Eventos Recentes (Ações do sistema)
+        events_context = ""
+        if events:
+            # Pegar os últimos 5 eventos
+            recent_events = events[-5:] if len(events) > 5 else events
+            events_text = "\n".join([f"- {e}" for e in recent_events])
+            events_context = f"\n[AÇÕES RECENTES DO USUÁRIO NA FERRAMENTA]\n{events_text}\n"
+
+        # 3. Histórico de Conversa
+        history_context = ""
+        if history:
+            # Formatar últimos 10 turnos
+            recent_history = history[-10:] if len(history) > 10 else history
+            history_text = ""
+            for msg in recent_history:
+                role = "USUÁRIO" if msg.get('role') == 'user' else "ASSISTENTE"
+                history_text += f"{role}: {msg.get('content', '')}\n"
+            
+            history_context = f"\n[HISTÓRICO DA CONVERSA]\n{history_text}\n"
+
         prompt = f"""
         Você é um assistente acadêmico especializado em normas {format_type.upper()} e escrita científica.
         Área: {knowledge_area}
         Tipo: {work_type}
         
-        O usuário enviou um documento (TCC/Artigo). Use o conteúdo abaixo como contexto para responder.
+        {memory_context}
+        {events_context}
 
-        CONTEXTO DO DOCUMENTO:
-        {document_text[:150000]}
+        CONTEXTO DO DOCUMENTO ATUAL (WORD):
+        {document_text[:100000]}
 
-        PERGUNTA DO USUÁRIO:
+        {history_context}
+
+        [PERGUNTA ATUAL DO USUÁRIO]
         {user_message}
 
-        Responda de forma útil, direta e em português. Use APENAS informações do documento acima.
-        Se for sobre formatação, use as regras da norma {format_type.upper()}.
+        Responda de forma útil, direta e em português. 
+        Use as informações de memória e histórico para dar respostas contextualizadas.
+        Se o usuário pedir para melhorar algo "anterior", consulte o histórico.
         """
 
         response = model.generate_content(prompt)
