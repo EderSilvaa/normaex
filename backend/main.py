@@ -29,8 +29,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS - Origins permitidas
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",") if os.getenv("ALLOWED_ORIGINS") else [
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
     "https://localhost:3001",
     "https://127.0.0.1:3001",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://normaex.com.br",
     "https://app.normaex.com.br",
     "https://api.normaex.com.br",

@@ -12,10 +12,7 @@ from typing import AsyncGenerator
 import json
 import asyncio
 import re
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
-limiter = Limiter(key_func=get_remote_address)
+# Rate limiter is configured in main.py
 
 from models.addin_models import (
     DocumentContent,
@@ -355,90 +352,104 @@ async def analyze_content(content: DocumentContent):
 @router.post("/format-content", response_model=FormatResponse)
 async def format_content(content: DocumentContent):
     """
-    Gera instruções de formatação ABNT para o documento.
-
-    - Analisa o documento e identifica o que precisa ser formatado
-    - Retorna lista de ações que o Add-in deve aplicar via Office.js
+    Gera instruções de formatação para o documento baseadas na norma solicitada.
+    Suporta: ABNT, APA, IEEE, Vancouver.
     """
     try:
         actions = []
+        norm = content.format_type or "abnt"
+        
+        # ==========================================
+        # CONFIGURAÇÕES ESPECÍFICAS POR NORMA
+        # ==========================================
+        
+        if norm == "apa":
+            # --- APA 7th Edition ---
+            # Fonte: Times New Roman 12
+            actions.append(FormatAction(action_type="set_font", target="all", 
+                                      params={"font_name": "Times New Roman", "font_size": 12}))
+            
+            # Espaçamento: Duplo (2.0)
+            actions.append(FormatAction(action_type="set_spacing", target="all", 
+                                      params={"line_spacing": 2.0, "space_after": 0, "space_before": 0}))
+            
+            # Alinhamento: Esquerda (Ragged right)
+            actions.append(FormatAction(action_type="set_alignment", target="body", 
+                                      params={"alignment": "left"}))
+            
+            # Margens: 2.54cm (1 polegada) em tudo
+            actions.append(FormatAction(action_type="set_margins", target="document", 
+                                      params={"top": 2.54, "bottom": 2.54, "left": 2.54, "right": 2.54}))
+            
+            # Recuo: 1.27cm (0.5 pol) apenas na primeira linha
+            for i, para in enumerate(content.paragraphs):
+                # Títulos centralizados e negrito (Nível 1)
+                if para.style and "heading 1" in para.style.lower():
+                    actions.append(FormatAction(action_type="set_alignment", target=f"paragraph_{i}", params={"alignment": "center"}))
+                    actions.append(FormatAction(action_type="set_bold", target=f"paragraph_{i}", params={"bold": True}))
+                # Texto normal com recuo
+                elif para.style and para.style.lower() == "normal":
+                     actions.append(FormatAction(action_type="set_indent", target=f"paragraph_{i}", params={"first_line_indent": 1.27}))
 
-        # Ação global: definir fonte padrão
-        actions.append(FormatAction(
-            action_type="set_font",
-            target="all",
-            params={
-                "font_name": "Times New Roman",
-                "font_size": 12
-            }
-        ))
+        elif norm == "ieee":
+            # --- IEEE ---
+            # Fonte: Times New Roman 10 (ou 12 para draft)
+            actions.append(FormatAction(action_type="set_font", target="all", 
+                                      params={"font_name": "Times New Roman", "font_size": 12})) # Usando 12 para facilitar leitura em drafts
+            
+            # Espaçamento: Simples (1.0)
+            actions.append(FormatAction(action_type="set_spacing", target="all", 
+                                      params={"line_spacing": 1.0, "space_after": 6, "space_before": 0}))
+            
+            # Alinhamento: Justificado
+            actions.append(FormatAction(action_type="set_alignment", target="body", 
+                                      params={"alignment": "justified"}))
+            
+            # Margens: Menores (aprox 1.9cm)
+            actions.append(FormatAction(action_type="set_margins", target="document", 
+                                      params={"top": 1.9, "bottom": 1.9, "left": 1.3, "right": 1.3}))
+            
+            # Títulos à esquerda
+            for i, para in enumerate(content.paragraphs):
+                 if para.style and "heading" in para.style.lower():
+                    actions.append(FormatAction(action_type="set_alignment", target=f"paragraph_{i}", params={"alignment": "left"}))
+                    actions.append(FormatAction(action_type="set_bold", target=f"paragraph_{i}", params={"bold": True}))
 
-        # Ação global: definir espaçamento
-        actions.append(FormatAction(
-            action_type="set_spacing",
-            target="all",
-            params={
-                "line_spacing": 1.5,
-                "space_after": 0,
-                "space_before": 0
-            }
-        ))
+        elif norm == "vancouver":
+            # --- Vancouver ---
+            # Similar a ABNT/APA mas com especificidades médicas
+            actions.append(FormatAction(action_type="set_font", target="all", 
+                                      params={"font_name": "Times New Roman", "font_size": 12}))
+            actions.append(FormatAction(action_type="set_spacing", target="all", 
+                                      params={"line_spacing": 1.5, "space_after": 0, "space_before": 0}))
+            actions.append(FormatAction(action_type="set_alignment", target="body", 
+                                      params={"alignment": "justified"}))
+            actions.append(FormatAction(action_type="set_margins", target="document", 
+                                      params={"top": 2.54, "bottom": 2.54, "left": 2.54, "right": 2.54}))
 
-        # Ação global: justificar texto
-        actions.append(FormatAction(
-            action_type="set_alignment",
-            target="body",
-            params={
-                "alignment": "justified"
-            }
-        ))
-
-        # Ações específicas por parágrafo
-        for i, para in enumerate(content.paragraphs):
-            # Se é um título (heading), centralizar
-            if para.style and "heading" in para.style.lower():
-                actions.append(FormatAction(
-                    action_type="set_alignment",
-                    target=f"paragraph_{i}",
-                    params={
-                        "alignment": "center"
-                    }
-                ))
-
-                # Títulos em negrito
-                actions.append(FormatAction(
-                    action_type="set_bold",
-                    target=f"paragraph_{i}",
-                    params={
-                        "bold": True
-                    }
-                ))
-
-            # Recuo da primeira linha para parágrafos normais
-            if para.style and para.style.lower() == "normal":
-                actions.append(FormatAction(
-                    action_type="set_indent",
-                    target=f"paragraph_{i}",
-                    params={
-                        "first_line_indent": 1.25  # 1.25 cm conforme ABNT
-                    }
-                ))
-
-        # Ação para margens
-        actions.append(FormatAction(
-            action_type="set_margins",
-            target="document",
-            params={
-                "top": 3.0,      # 3 cm
-                "bottom": 2.0,   # 2 cm
-                "left": 3.0,     # 3 cm
-                "right": 2.0     # 2 cm
-            }
-        ))
+        else:
+            # --- ABNT (Default) ---
+            actions.append(FormatAction(action_type="set_font", target="all", 
+                                      params={"font_name": "Times New Roman", "font_size": 12}))
+            actions.append(FormatAction(action_type="set_spacing", target="all", 
+                                      params={"line_spacing": 1.5, "space_after": 0, "space_before": 0}))
+            actions.append(FormatAction(action_type="set_alignment", target="body", 
+                                      params={"alignment": "justified"}))
+            # Margens ABNT: 3, 3, 2, 2
+            actions.append(FormatAction(action_type="set_margins", target="document", 
+                                      params={"top": 3.0, "bottom": 2.0, "left": 3.0, "right": 2.0}))
+            
+            # Ações por parágrafo (Recuo 1.25cm)
+            for i, para in enumerate(content.paragraphs):
+                if para.style and "heading" in para.style.lower():
+                    actions.append(FormatAction(action_type="set_alignment", target=f"paragraph_{i}", params={"alignment": "left"})) # Títulos à esquerda na ABNT mais recente (algumas variações aceitam centralizado)
+                    actions.append(FormatAction(action_type="set_bold", target=f"paragraph_{i}", params={"bold": True}))
+                elif para.style and para.style.lower() == "normal":
+                    actions.append(FormatAction(action_type="set_indent", target=f"paragraph_{i}", params={"first_line_indent": 1.25}))
 
         return FormatResponse(
             actions=actions,
-            summary=f"Geradas {len(actions)} ações de formatação ABNT",
+            summary=f"Geradas {len(actions)} ações para norma {norm.upper()}",
             estimated_changes=len(actions)
         )
 
@@ -451,8 +462,7 @@ async def format_content(content: DocumentContent):
 # ============================================
 
 @router.post("/write-stream")
-@limiter.limit("10/minute")
-async def write_stream(request: WriteRequest, req: Request):
+async def write_stream(write_request: WriteRequest):
     """
     Gera texto acadêmico via streaming (Server-Sent Events).
 
@@ -465,21 +475,21 @@ async def write_stream(request: WriteRequest, req: Request):
     async def generate_stream() -> AsyncGenerator[str, None]:
         try:
             # Preparar contexto e instrução
-            context = request.context[:1000] if request.context else ""
-            instruction = f"""{request.instruction}
+            context = write_request.context[:1000] if write_request.context else ""
+            instruction = f"""{write_request.instruction}
 
-Tom: {request.tone or 'academico'}
-Formato: {request.format_type.value}
-{f'Limite: aproximadamente {request.max_words} palavras.' if request.max_words else ''}"""
+Tom: {write_request.tone or 'academico'}
+Formato: {write_request.format_type.value}
+{f'Limite: aproximadamente {write_request.max_words} palavras.' if write_request.max_words else ''}"""
 
             # Usar o serviço de streaming com os argumentos corretos
             async for chunk in generate_academic_text_stream(
                 document_context=context,
                 instruction=instruction,
-                section_type=request.section_type.value,
-                format_type=request.format_type.value,
-                knowledge_area=request.knowledge_area or 'geral',
-                work_type=request.work_type or 'acadêmico'
+                section_type=write_request.section_type.value,
+                format_type=write_request.format_type.value,
+                knowledge_area=write_request.knowledge_area or 'geral',
+                work_type=write_request.work_type or 'acadêmico'
             ):
                 if chunk:
                     yield json.dumps({
@@ -588,8 +598,7 @@ def detect_write_intent(message: str) -> tuple[bool, str, str]:
 
 
 @router.post("/chat", response_model=ChatResponse)
-@limiter.limit("20/minute")
-async def chat(request: ChatRequest, req: Request):
+async def chat(chat_request: ChatRequest):
     """
     Chat contextualizado com o documento.
     Detecta automaticamente quando o usuário quer gerar texto.
@@ -601,15 +610,15 @@ async def chat(request: ChatRequest, req: Request):
     - Rate limit: 20 requisições por minuto
     """
     try:
-        context = request.context or "Documento sem conteúdo fornecido."
+        context = chat_request.context or "Documento sem conteúdo fornecido."
         has_pdf_context = False
         pdf_info = None
         context_info = None
 
         # Incluir contexto do projeto (PDFs) se fornecido
-        if request.project_id:
-            pdf_info = project_service.get_project_context_info(request.project_id)
-            project_context = project_service.get_project_context(request.project_id, max_chars=30000)
+        if chat_request.project_id:
+            pdf_info = project_service.get_project_context_info(chat_request.project_id)
+            project_context = project_service.get_project_context(chat_request.project_id, max_chars=30000)
             if project_context and pdf_info:
                 has_pdf_context = True
                 # Construir info de contexto para retornar ao frontend
@@ -628,7 +637,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 {project_context}
 
 === DOCUMENTO ATUAL DO USUÁRIO (Word) ===
-{request.context or 'Nenhum conteúdo do documento atual.'}
+{chat_request.context or 'Nenhum conteúdo do documento atual.'}
 
 === INSTRUÇÕES ===
 1. Use os documentos de referência como base para suas respostas
@@ -638,7 +647,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 5. Se o usuário perguntar sobre algo específico dos documentos, busque a informação relevante"""
 
         # Detectar se é uma solicitação de escrita
-        is_write, instruction, section_type = detect_write_intent(request.message)
+        is_write, instruction, section_type = detect_write_intent(chat_request.message)
 
         if is_write:
             # Modo de escrita: gerar texto acadêmico usando contexto expandido
@@ -649,9 +658,9 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 document_context=context[:context_limit],
                 instruction=instruction,
                 section_type=section_type,
-                format_type=request.format_type.value,
-                knowledge_area=request.knowledge_area or 'geral',
-                work_type=request.work_type or 'acadêmico'
+                format_type=chat_request.format_type.value,
+                knowledge_area=chat_request.knowledge_area or 'geral',
+                work_type=chat_request.work_type or 'acadêmico'
             )
 
             word_count = len(generated_text.split())
@@ -662,7 +671,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 docs_note = f"📚 *Baseado em {pdf_info.get('pdf_count', 0)} documento(s) de referência*"
 
             response_msg = f"**Texto gerado com IA ({section_type}):**\n{docs_note}\n\n{generated_text}\n\n---\n*Para inserir, clique no botão.*"
-            
+
             return ChatResponse(
                 message=response_msg,
                 context_info=context_info
@@ -671,17 +680,17 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
         else:
             # Modo chat normal (Assistente)
             # Passar objetos de memória (converter Pydantic para dict se necessário)
-            proj_mem_dict = request.project_memory.dict() if request.project_memory else None
-            
+            proj_mem_dict = chat_request.project_memory.dict() if chat_request.project_memory else None
+
             response_text = chat_with_document(
-                document_text=context, 
-                user_message=request.message,
-                format_type=request.format_type.value,
-                knowledge_area=request.knowledge_area or 'geral',
-                work_type=request.work_type or 'acadêmico',
-                history=request.history,
+                document_text=context,
+                user_message=chat_request.message,
+                format_type=chat_request.format_type.value,
+                knowledge_area=chat_request.knowledge_area or 'geral',
+                work_type=chat_request.work_type or 'acadêmico',
+                history=chat_request.history,
                 project_memory=proj_mem_dict,
-                events=request.events
+                events=chat_request.events
             )
 
             # Sugestões contextualizadas
@@ -696,7 +705,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 suggestions = [
                     "Escreva uma introdução",
                     "Como melhorar a estrutura?",
-                    f"Verifique a formatação {request.format_type.value.upper()}"
+                    f"Verifique a formatação {chat_request.format_type.value.upper()}"
                 ]
 
             return ChatResponse(
@@ -706,6 +715,9 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             )
 
     except Exception as e:
+        import traceback
+        print(f"[ERROR] Chat endpoint error:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no chat: {str(e)}")
 
 
