@@ -405,9 +405,9 @@ async def format_content(content: DocumentContent):
             actions.append(FormatAction(action_type="set_alignment", target="body", 
                                       params={"alignment": "justified"}))
             
-            # Margens: Menores (aprox 1.9cm)
+            # Margens IEEE: top 2.54cm (1"), bottom 1.59cm (0.625"), left/right 1.78cm (0.7")
             actions.append(FormatAction(action_type="set_margins", target="document", 
-                                      params={"top": 1.9, "bottom": 1.9, "left": 1.3, "right": 1.3}))
+                                      params={"top": 2.54, "bottom": 1.59, "left": 1.78, "right": 1.78}))
             
             # Títulos à esquerda
             for i, para in enumerate(content.paragraphs):
