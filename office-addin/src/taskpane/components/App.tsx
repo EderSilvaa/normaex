@@ -8,7 +8,7 @@ import { theme } from '../../styles/theme';
 import { ApiService, DocumentService } from '../../services';
 
 // Types
-import { AnalysisResponse, Issue } from '../../types';
+import { AnalysisResponse, Issue, ProjectMemory } from '../../types';
 
 // Components
 import ComplianceScore from './ComplianceScore';
@@ -37,7 +37,44 @@ const App: React.FC<AppProps> = ({ title }) => {
   const [activeTab, setActiveTab] = useState<TabId>('abnt');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProjectInfo, setSelectedProjectInfo] = useState<{ name: string; pdfCount: number } | null>(null);
+
   const [showConfigModal, setShowConfigModal] = useState(false);
+
+  // Memória do Projeto e Eventos (Phase 10)
+  const [projectMemory, setProjectMemory] = useState<ProjectMemory>({ structure: null, saved_references: [] });
+  const [events, setEvents] = useState<string[]>([]);
+
+  // Carregar memória do localStorage ao iniciar ou mudar projeto
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storageKey = selectedProjectId ? `normaex_memory_${selectedProjectId}` : 'normaex_memory_default';
+      const savedMemory = localStorage.getItem(storageKey);
+      if (savedMemory) {
+        try {
+          setProjectMemory(JSON.parse(savedMemory));
+        } catch (e) {
+          console.error("Erro ao carregar memória", e);
+        }
+      } else {
+        setProjectMemory({ structure: null, saved_references: [] });
+      }
+      // Limpar eventos ao trocar de projeto
+      setEvents([]);
+    }
+  }, [selectedProjectId]);
+
+  // Salvar memória sempre que mudar
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storageKey = selectedProjectId ? `normaex_memory_${selectedProjectId}` : 'normaex_memory_default';
+      localStorage.setItem(storageKey, JSON.stringify(projectMemory));
+    }
+  }, [projectMemory, selectedProjectId]);
+
+  // Helper para registrar eventos
+  const logEvent = useCallback((event: string) => {
+    setEvents(prev => [...prev.slice(-9), event]); // Manter apenas últimos 10
+  }, []);
 
   // Configuração da norma selecionada
   const [workConfig, setWorkConfig] = useState<WorkConfig>(() => {
@@ -97,6 +134,7 @@ const App: React.FC<AppProps> = ({ title }) => {
     setAnalysis(null);
 
     try {
+      logEvent(`Iniciou análise do documento (Norma: ${workConfig.norm.toUpperCase()})`);
       // Usar versão com margens para análise completa
       const content = await DocumentService.getDocumentContentWithMargins();
 
@@ -115,6 +153,7 @@ const App: React.FC<AppProps> = ({ title }) => {
       const result = await ApiService.analyzeContent(content);
       setAnalysis(result);
       setMessage(result.summary);
+      logEvent(`Análise concluída. Score: ${result.score}/100. Problemas: ${result.issues.length}.`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setMessage(`Erro: ${errorMessage}`);
@@ -125,7 +164,8 @@ const App: React.FC<AppProps> = ({ title }) => {
 
 
   // Chat - retorna resposta completa com context_info
-  const handleChat = useCallback(async (userMessage: string) => {
+  // Chat - retorna resposta completa com context_info
+  const handleChat = useCallback(async (userMessage: string, history: any[] = []) => {
     const content = await DocumentService.getDocumentContent();
 
     const result = await ApiService.chat({
@@ -135,6 +175,9 @@ const App: React.FC<AppProps> = ({ title }) => {
       format_type: workConfig.norm,
       work_type: workConfig.workType,
       knowledge_area: workConfig.area,
+      history: history,
+      project_memory: projectMemory,
+      events: events
     });
 
     return {
@@ -142,17 +185,39 @@ const App: React.FC<AppProps> = ({ title }) => {
       suggestions: result.suggestions,
       context_info: result.context_info,
     };
-  }, [selectedProjectId]);
+  }, [selectedProjectId, workConfig, projectMemory, events]);
 
   // Inserir texto no documento (usado pelo ChatPanel)
   const handleInsertTextFromChat = useCallback(async (text: string) => {
     try {
       await DocumentService.insertText(text);
       setMessage('Texto inserido no documento!');
+      logEvent('Inseriu texto gerado no documento.');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setMessage(`Erro ao inserir: ${errorMessage}`);
     }
+  }, []);
+
+  // Handlers de Memória
+  const handleSaveReference = useCallback((reference: any) => {
+    setProjectMemory(prev => {
+      const refs = prev.saved_references || [];
+      // Evitar duplicatas simples
+      if (refs.some(r => r.id === reference.id || r.title === reference.title)) {
+        setMessage('Referência já está salva.');
+        return prev;
+      }
+
+      logEvent(`Salvou referência: ${reference.title.substring(0, 30)}...`);
+      return { ...prev, saved_references: [...refs, reference] };
+    });
+    setMessage('Referência salva na memória!');
+  }, []);
+
+  const handleStructureGenerated = useCallback((structure: string) => {
+    setProjectMemory(prev => ({ ...prev, structure }));
+    logEvent('Gerou e salvou nova estrutura de TCC.');
   }, []);
 
   // Click na issue (navegar para localização)
@@ -191,20 +256,28 @@ const App: React.FC<AppProps> = ({ title }) => {
     }
   }, [analyzeDocument]);
 
-  // Formatação automática
+  // Formatação automática (Generic)
   const handleAutoFormat = useCallback(async () => {
     setIsLoading(true);
-    setMessage(`Aplicando formatação ${currentNormConfig.name}...`);
+    setMessage(`Solicitando formatação ${currentNormConfig.name}...`);
 
     try {
-      const result = await DocumentService.applyABNTFormatting();
+      // 1. Obter conteúdo do documento
+      const content = await DocumentService.getDocumentContent();
+      content.format_type = workConfig.norm; // ABNT, APA, etc.
 
-      if (result.applied.length > 0) {
-        setMessage(`Formatação aplicada: ${result.applied.join(', ')}`);
-      }
+      // 2. Pedir ações de formatação ao backend
+      const response = await ApiService.formatContent(content);
 
-      if (result.errors.length > 0) {
-        console.warn('Format errors:', result.errors);
+      if (response.actions && response.actions.length > 0) {
+        setMessage(`Aplicando ${response.actions.length} ações de formatação...`);
+
+        // 3. Executar ações via Office.js
+        const appliedCount = await DocumentService.applyFormatting(response.actions);
+
+        setMessage(`Sucesso! ${appliedCount} formatações aplicadas (${currentNormConfig.name}).`);
+      } else {
+        setMessage('O documento já parece estar formatado corretamente.');
       }
 
       // Re-analisar após formatação
@@ -213,11 +286,12 @@ const App: React.FC<AppProps> = ({ title }) => {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      setMessage(`Erro: ${errorMessage}`);
+      setMessage(`Erro ao formatar: ${errorMessage}`);
+      console.error(error);
     } finally {
       setIsLoading(false);
     }
-  }, [analysis, analyzeDocument]);
+  }, [workConfig, currentNormConfig, analysis, analyzeDocument]);
 
   // Loading screen
   if (!isOfficeInitialized) {
@@ -253,87 +327,85 @@ const App: React.FC<AppProps> = ({ title }) => {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* Tab: ABNT */}
-          {activeTab === 'abnt' && (
-            <div className="actions-section">
-              <Button
-                variant="primary"
-                onClick={analyzeDocument}
-                isLoading={isLoading}
-                fullWidth
-                leftIcon={<span>📊</span>}
-              >
-                Analisar Documento
-              </Button>
+          <div className="actions-section" style={{ display: activeTab === 'abnt' ? 'block' : 'none' }}>
+            <Button
+              variant="primary"
+              onClick={analyzeDocument}
+              isLoading={isLoading}
+              fullWidth
+              leftIcon={<span>📊</span>}
+            >
+              Analisar Documento
+            </Button>
 
-              {analysis && (
-                <div style={{ marginTop: theme.spacing.md }}>
-                  <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
-                    <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
-                      <ComplianceScore
-                        score={analysis.score}
-                        issueCount={analysis.issues.length}
-                        size="medium"
-                        animate={true}
-                      />
-                    </div>
-                  </Card>
-                </div>
-              )}
+            {analysis && (
+              <div style={{ marginTop: theme.spacing.md }}>
+                <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
+                  <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
+                    <ComplianceScore
+                      score={analysis.score}
+                      issueCount={analysis.issues.length}
+                      size="medium"
+                      animate={true}
+                    />
+                  </div>
+                </Card>
+              </div>
+            )}
 
-              {message && (
-                <div style={{
-                  marginTop: theme.spacing.md,
-                  padding: theme.spacing.sm,
-                  background: theme.colors.surfaceHighlight,
-                  borderLeft: `3px solid ${theme.colors.primary}`,
-                  borderRadius: theme.borderRadius.sm
-                }}>
-                  <p style={{ margin: 0, fontSize: theme.typography.sizes.sm, color: theme.colors.text.primary }}>{message}</p>
-                </div>
-              )}
+            {message && (
+              <div style={{
+                marginTop: theme.spacing.md,
+                padding: theme.spacing.sm,
+                background: theme.colors.surfaceHighlight,
+                borderLeft: `3px solid ${theme.colors.primary}`,
+                borderRadius: theme.borderRadius.sm
+              }}>
+                <p style={{ margin: 0, fontSize: theme.typography.sizes.sm, color: theme.colors.text.primary }}>{message}</p>
+              </div>
+            )}
 
-              {analysis && (
-                <div style={{ marginTop: '16px' }}>
-                  <IssuesList
-                    issues={analysis.issues}
-                    maxVisible={5}
-                    onIssueClick={handleIssueClick}
-                    onApplyFix={handleApplyFix}
-                  />
-                </div>
-              )}
-
-              <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
-                <FormatControls
-                  onAutoFormat={handleAutoFormat}
-                  isLoading={isLoading}
-                  normName={currentNormConfig.name}
+            {analysis && (
+              <div style={{ marginTop: '16px' }}>
+                <IssuesList
+                  issues={analysis.issues}
+                  maxVisible={5}
+                  onIssueClick={handleIssueClick}
+                  onApplyFix={handleApplyFix}
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Tab: Chat */}
-          {activeTab === 'chat' && (
-            <div className="actions-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <ChatPanel
-                onSendMessage={handleChat}
-                onInsertText={handleInsertTextFromChat}
+            <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
+              <FormatControls
+                onAutoFormat={handleAutoFormat}
                 isLoading={isLoading}
-                placeholder="Pergunte ou peça para escrever algo..."
-                welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos."
-                activeProjectName={selectedProjectInfo?.name}
-                activePdfCount={selectedProjectInfo?.pdfCount || 0}
-                selectedProjectId={selectedProjectId}
-                onProjectSelect={setSelectedProjectId}
-                onProjectInfoChange={setSelectedProjectInfo}
-                onFeedbackMessage={setMessage}
                 normName={currentNormConfig.name}
-                workType={workConfig.workType}
-                knowledgeArea={workConfig.area}
               />
             </div>
-          )}
+          </div>
+
+          {/* Tab: Chat */}
+          <div className="actions-section" style={{ flex: activeTab === 'chat' ? 1 : undefined, display: activeTab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <ChatPanel
+              onSendMessage={handleChat}
+              onInsertText={handleInsertTextFromChat}
+              isLoading={isLoading}
+              placeholder="Pergunte ou peça para escrever algo..."
+              welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos."
+              activeProjectName={selectedProjectInfo?.name}
+              activePdfCount={selectedProjectInfo?.pdfCount || 0}
+              selectedProjectId={selectedProjectId}
+              onProjectSelect={setSelectedProjectId}
+              onProjectInfoChange={setSelectedProjectInfo}
+              onFeedbackMessage={setMessage}
+              normName={currentNormConfig.name}
+              workType={workConfig.workType}
+              knowledgeArea={workConfig.area}
+              onSaveReference={handleSaveReference}
+              onStructureGenerated={handleStructureGenerated}
+            />
+          </div>
 
 
 
