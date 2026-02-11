@@ -1,7 +1,7 @@
 import FileUpload from '../components/FileUpload';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+
 
 export default function Tool() {
   return (
@@ -15,18 +15,6 @@ export default function Tool() {
 
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-6">
 
-        {/* Navigation Back */}
-        <div className="absolute top-6 left-6 md:top-10 md:left-10">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-gray-500 hover:text-white transition-colors text-sm font-medium group"
-          >
-            <div className="bg-white/5 border border-white/10 p-2 rounded-full group-hover:bg-white/10 transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </div>
-            <span>Voltar</span>
-          </Link>
-        </div>
 
         {/* Logo Centered */}
         <div className="mb-12 opacity-80 hover:opacity-100 transition-opacity">
