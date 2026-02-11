@@ -194,12 +194,23 @@ class ContextInfo(BaseModel):
     total_words: int = Field(0, description="Total de palavras nos PDFs")
 
 
+class ProactiveSuggestion(BaseModel):
+    """Sugestão proativa da IA"""
+    type: str
+    message: str
+    action: str
+    section_type: str
+
+
 class ChatResponse(BaseModel):
     """Resposta do chat"""
     message: str = Field(..., description="Resposta da IA")
     suggestions: Optional[List[str]] = Field(None, description="Sugestões de perguntas relacionadas")
     context_info: Optional[ContextInfo] = Field(None, description="Info sobre contexto de PDFs usado")
     generated_content: Optional[str] = Field(None, description="Conteúdo limpo gerado para inserção")
+    was_reviewed: Optional[bool] = Field(None, description="Se o texto passou por auto-revisão")
+    review_score: Optional[float] = Field(None, description="Score da auto-revisão (0-10)")
+    proactive_suggestions: Optional[List[ProactiveSuggestion]] = Field(None, description="Sugestões de melhoria proativa")
 
 
 # ============================================
@@ -274,3 +285,20 @@ class ChartResponse(BaseModel):
     success: bool = Field(..., description="Se a geração foi bem-sucedida")
     base64: Optional[str] = Field(None, description="Imagem do gráfico em base64")
     error: Optional[str] = Field(None, description="Mensagem de erro se falhou")
+
+
+# ============================================
+# INLINE REVIEW MODELS
+# ============================================
+
+class InlineReviewRequest(BaseModel):
+    selected_text: str = Field(..., description="Texto selecionado para revisão")
+    instruction: Optional[str] = Field(None, description="Instrução adicional do usuário")
+    format_type: FormatType = Field(FormatType.ABNT, description="Norma de formatação")
+
+
+class InlineReviewResponse(BaseModel):
+    original_text: str
+    corrected_text: str
+    explanation: str
+    changes: List[str]

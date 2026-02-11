@@ -14,6 +14,7 @@ import { AnalysisResponse, Issue, ProjectMemory } from '../../types';
 import ComplianceScore from './ComplianceScore';
 import IssuesList from './IssuesList';
 import ChatPanel from './ChatPanel';
+import InlineReviewPanel from './InlineReviewPanel';
 import TabNavigation from './TabNavigation';
 import FormatControls from './FormatControls';
 import NormSelector, { WorkConfig } from './NormSelector';
@@ -21,7 +22,7 @@ import ProjectSelector from './ProjectSelector';
 
 import { getNormConfig, NormConfig } from '../../config/norms.config';
 
-type TabId = 'abnt' | 'chat';
+type TabId = 'abnt' | 'chat' | 'review';
 
 interface AppProps {
   title: string;
@@ -97,9 +98,8 @@ const App: React.FC<AppProps> = ({ title }) => {
   // Tabs: ABNT (análise + formatação), Chat (conversa + escrita + imagens), Config (configurações)
   const tabs = [
     { id: 'abnt', label: currentNormConfig.name, icon: currentNormConfig.icon, badge: analysis?.issues.length },
-
     { id: 'chat', label: 'Chat', icon: '💬' },
-
+    { id: 'review', label: 'Revisão', icon: '✨' },
   ];
 
   // Inicialização
@@ -192,7 +192,27 @@ const App: React.FC<AppProps> = ({ title }) => {
   const handleInsertTextFromChat = useCallback(async (text: string, isHtml: boolean = false) => {
     try {
       if (isHtml) {
-        await DocumentService.insertHtml(text);
+        // Aplicar estilos da norma ativa ao HTML antes de inserir
+        const fmt = currentNormConfig.formatting;
+        const lineHeightPt = fmt.lineSpacing === 1.5 ? '18pt' : fmt.lineSpacing === 2.0 ? '24pt' : `${fmt.lineSpacing * 12}pt`;
+        const textAlign = fmt.alignment === 'justified' ? 'justify' : fmt.alignment;
+        const textIndent = fmt.firstLineIndent > 0 ? `${fmt.firstLineIndent}cm` : '0';
+
+        const baseStyle = `font-family: '${fmt.fontName}', serif; font-size: ${fmt.fontSize}pt; line-height: ${lineHeightPt}; text-align: ${textAlign};`;
+        const pStyle = `${baseStyle} text-indent: ${textIndent}; margin-bottom: 0;`;
+
+        // Aplicar estilos por elemento: <p> recebe indent, outros recebem base
+        let styledHtml = text
+          .replace(/<p>/g, `<p style="${pStyle}">`)
+          .replace(/<li>/g, `<li style="${baseStyle}">`)
+          .replace(/<h([1-6])>/g, `<h$1 style="${baseStyle} font-weight: bold;">`);
+
+        // Se não contém tags <p>, envolver tudo num div com estilo base
+        if (!text.includes('<p>') && !text.includes('<h')) {
+          styledHtml = `<div style="${pStyle}">${text}</div>`;
+        }
+
+        await DocumentService.insertHtml(styledHtml);
       } else {
         await DocumentService.insertText(text);
       }
@@ -202,7 +222,7 @@ const App: React.FC<AppProps> = ({ title }) => {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setMessage(`Erro ao inserir: ${errorMessage}`);
     }
-  }, []);
+  }, [currentNormConfig]);
 
   // Handlers de Memória
   const handleSaveReference = useCallback((reference: any) => {
@@ -312,13 +332,17 @@ const App: React.FC<AppProps> = ({ title }) => {
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: theme.colors.background }}>
 
 
-      {/* Main Content */}
-      <main className="app-main" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', paddingBottom: '10px', paddingTop: '16px' }}>
-
-
-
-        {/* Tabs */}
-        <div style={{ marginBottom: '16px', flexShrink: 0 }}>
+      {/* Sticky Tab Bar + Norm Badge */}
+      <div style={{
+        flexShrink: 0,
+        padding: '8px 16px',
+        borderBottom: `1px solid ${theme.colors.border}`,
+        background: theme.colors.surface,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+      }}>
+        <div style={{ flex: 1 }}>
           <TabNavigation
             tabs={tabs}
             activeTab={activeTab}
@@ -327,94 +351,124 @@ const App: React.FC<AppProps> = ({ title }) => {
             size="small"
           />
         </div>
+        <div
+          style={{
+            fontSize: '9px',
+            fontWeight: 700,
+            color: theme.colors.primary,
+            background: theme.colors.primaryAlpha,
+            padding: '3px 8px',
+            borderRadius: '10px',
+            border: `1px solid ${theme.colors.primary}`,
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+          }}
+          onClick={() => setShowConfigModal(true)}
+          title="Clique para alterar norma"
+        >
+          {currentNormConfig.name}
+        </div>
+      </div>
 
-        {/* ... (Tab Content mantido igual, apenas garantindo o render dentro do main) */}
+      {/* Main Content */}
+      <main className="app-main" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', paddingBottom: '10px', paddingTop: '10px' }}>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* Tab: ABNT */}
-          <div className="actions-section" style={{ display: activeTab === 'abnt' ? 'block' : 'none' }}>
-            <Button
-              variant="primary"
-              onClick={analyzeDocument}
-              isLoading={isLoading}
-              fullWidth
-              leftIcon={<span>📊</span>}
-            >
-              Analisar Documento
-            </Button>
+          {activeTab === 'abnt' && (
+            <div className="actions-section" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <NormSelector
+                currentConfig={workConfig}
+                onConfigChange={handleWorkConfigChange}
+              />
+              <Button
+                variant="primary"
+                onClick={analyzeDocument}
+                isLoading={isLoading}
+                fullWidth
+                leftIcon={<span>📊</span>}
+              >
+                Analisar Documento
+              </Button>
 
-            {analysis && (
-              <div style={{ marginTop: theme.spacing.md }}>
-                <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
-                  <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
-                    <ComplianceScore
-                      score={analysis.score}
-                      issueCount={analysis.issues.length}
-                      size="medium"
-                      animate={true}
-                    />
-                  </div>
-                </Card>
-              </div>
-            )}
+              {analysis && (
+                <div style={{ marginTop: theme.spacing.md }}>
+                  <Card noPadding style={{ background: theme.colors.surfaceHighlight, overflow: 'hidden' }}>
+                    <div style={{ padding: theme.spacing.md, display: 'flex', justifyContent: 'center' }}>
+                      <ComplianceScore
+                        score={analysis.score}
+                        issueCount={analysis.issues.length}
+                        size="medium"
+                        animate={true}
+                      />
+                    </div>
+                  </Card>
+                </div>
+              )}
 
-            {message && (
-              <div style={{
-                marginTop: theme.spacing.md,
-                padding: theme.spacing.sm,
-                background: theme.colors.surfaceHighlight,
-                borderLeft: `3px solid ${theme.colors.primary}`,
-                borderRadius: theme.borderRadius.sm
-              }}>
-                <p style={{ margin: 0, fontSize: theme.typography.sizes.sm, color: theme.colors.text.primary }}>{message}</p>
-              </div>
-            )}
+              {message && (
+                <div style={{
+                  marginTop: theme.spacing.md,
+                  padding: theme.spacing.sm,
+                  background: theme.colors.surfaceHighlight,
+                  borderLeft: `3px solid ${theme.colors.primary}`,
+                  borderRadius: theme.borderRadius.sm
+                }}>
+                  <p style={{ margin: 0, fontSize: theme.typography.sizes.sm, color: theme.colors.text.primary }}>{message}</p>
+                </div>
+              )}
 
-            {analysis && (
-              <div style={{ marginTop: '16px' }}>
-                <IssuesList
-                  issues={analysis.issues}
-                  maxVisible={5}
-                  onIssueClick={handleIssueClick}
-                  onApplyFix={handleApplyFix}
+              {analysis && (
+                <div style={{ marginTop: '16px' }}>
+                  <IssuesList
+                    issues={analysis.issues}
+                    maxVisible={5}
+                    onIssueClick={handleIssueClick}
+                    onApplyFix={handleApplyFix}
+                  />
+                </div>
+              )}
+
+              <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
+                <FormatControls
+                  onAutoFormat={handleAutoFormat}
+                  isLoading={isLoading}
+                  normName={currentNormConfig.name}
                 />
               </div>
-            )}
-
-            <div style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
-              <FormatControls
-                onAutoFormat={handleAutoFormat}
-                isLoading={isLoading}
-                normName={currentNormConfig.name}
-              />
             </div>
-          </div>
+          )}
 
           {/* Tab: Chat */}
-          <div className="actions-section" style={{ flex: activeTab === 'chat' ? 1 : undefined, display: activeTab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <ChatPanel
-              onSendMessage={handleChat}
-              onInsertText={handleInsertTextFromChat}
-              isLoading={isLoading}
-              placeholder="Pergunte ou peça para escrever algo..."
-              welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos."
-              activeProjectName={selectedProjectInfo?.name}
-              activePdfCount={selectedProjectInfo?.pdfCount || 0}
-              selectedProjectId={selectedProjectId}
-              onProjectSelect={setSelectedProjectId}
-              onProjectInfoChange={setSelectedProjectInfo}
-              onFeedbackMessage={setMessage}
-              normName={currentNormConfig.name}
-              workType={workConfig.workType}
-              knowledgeArea={workConfig.area}
-              onSaveReference={handleSaveReference}
-              onStructureGenerated={handleStructureGenerated}
-            />
-          </div>
+          {activeTab === 'chat' && (
+            <div className="actions-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <ChatPanel
+                onSendMessage={handleChat}
+                onInsertText={handleInsertTextFromChat}
+                isLoading={isLoading}
+                placeholder="Pergunte ou peça para escrever algo..."
+                welcomeMessage="Olá! Posso responder perguntas sobre ABNT ou escrever textos acadêmicos."
+                activeProjectName={selectedProjectInfo?.name}
+                activePdfCount={selectedProjectInfo?.pdfCount || 0}
+                selectedProjectId={selectedProjectId}
+                onProjectSelect={setSelectedProjectId}
+                onProjectInfoChange={setSelectedProjectInfo}
+                onFeedbackMessage={setMessage}
+                normName={currentNormConfig.name}
+                workType={workConfig.workType}
+                knowledgeArea={workConfig.area}
+                onSaveReference={handleSaveReference}
+                onStructureGenerated={handleStructureGenerated}
+              />
+            </div>
+          )}
 
-
-
-
+          {/* Tab: Review */}
+          {activeTab === 'review' && (
+            <div className="actions-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <InlineReviewPanel formatType={workConfig.norm as any} />
+            </div>
+          )}
         </div>
 
 

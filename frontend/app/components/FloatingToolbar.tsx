@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles, Type, ImagePlus, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../lib/config';
 
 interface FloatingToolbarProps {
     selectedText: string;
@@ -49,7 +50,7 @@ export default function FloatingToolbar({
     const handleImprove = async () => {
         setIsImproving(true);
         try {
-            const response = await axios.post('http://localhost:8080/api/documents/improve-text', {
+            const response = await axios.post(`${API_URL}/api/documents/improve-text`, {
                 filename: filename,
                 text: selectedText
             });

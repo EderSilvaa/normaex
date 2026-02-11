@@ -30,8 +30,12 @@ from models.addin_models import (
     ImproveRequest,
     ImproveResponse,
     ChartRequest,
-    ChartResponse
+    ChartResponse,
+    InlineReviewRequest,
+    InlineReviewResponse
 )
+
+from services.inline_review import review_selection
 
 from services.ai import (
     chat_with_document,
@@ -558,43 +562,20 @@ async def write_text(request: WriteRequest):
 
 def detect_write_intent(message: str) -> tuple[bool, str, str]:
     """
-    Detecta se o usuário quer gerar texto e extrai a instrução.
+    Detecta se o usuário quer gerar texto usando IA.
+    Fallback para keywords se a IA falhar.
     Retorna: (is_write_intent, instruction, section_type)
     """
-    message_lower = message.lower().strip()
+    from services.ai import detect_write_intent_ai
 
-    # Padrões que indicam intenção de escrita
-    write_patterns = [
-        "escreva", "escrever", "crie", "criar", "gere", "gerar",
-        "redija", "redigir", "elabore", "elaborar", "produza", "produzir",
-        "faça um texto", "faça uma", "faça um parágrafo",
-        "desenvolva", "desenvolver", "componha", "compor",
-        "me ajude a escrever", "preciso escrever", "quero escrever"
-    ]
+    # Usar IA para detecção semântica
+    result = detect_write_intent_ai(message)
+    
+    is_write = result.get("is_write", False)
+    section_type = result.get("section_type", "geral")
+    instruction = result.get("refined_instruction", message) or message
 
-    is_write = any(pattern in message_lower for pattern in write_patterns)
-
-    if not is_write:
-        return False, "", "geral"
-
-    # Detectar tipo de seção
-    section_type = "geral"
-    if any(term in message_lower for term in ["introdução", "introducao", "intro"]):
-        section_type = "introducao"
-    elif any(term in message_lower for term in ["conclusão", "conclusao", "considerações finais"]):
-        section_type = "conclusao"
-    elif any(term in message_lower for term in ["metodologia", "método", "metodo"]):
-        section_type = "metodologia"
-    elif any(term in message_lower for term in ["resultado", "análise", "analise"]):
-        section_type = "resultados"
-    elif any(term in message_lower for term in ["resumo", "abstract"]):
-        section_type = "resumo"
-    elif any(term in message_lower for term in ["desenvolvimento", "corpo"]):
-        section_type = "desenvolvimento"
-    elif any(term in message_lower for term in ["referência", "referencia", "bibliografia"]):
-        section_type = "referencias"
-
-    return True, message, section_type
+    return is_write, instruction, section_type
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -654,28 +635,76 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             # Usar mais contexto quando há PDFs de referência
             context_limit = 20000 if has_pdf_context else 2000
             
-            generated_text = generate_academic_text(
-                document_context=context[:context_limit],
-                instruction=instruction,
+            # Se for referências/citações, usar pipeline de citações reais
+            if section_type in ("referencias", "referencial"):
+                from services.ai import generate_citations_with_real_sources
+                generated_text = await generate_citations_with_real_sources(
+                    document_context=context[:context_limit],
+                    instruction=instruction,
+                    format_type=chat_request.format_type.value,
+                    knowledge_area=chat_request.knowledge_area or 'geral',
+                    num_refs=8
+                )
+            else:
+                generated_text = generate_academic_text(
+                    document_context=context[:context_limit],
+                    instruction=instruction,
+                    section_type=section_type,
+                    format_type=chat_request.format_type.value,
+                    knowledge_area=chat_request.knowledge_area or 'geral',
+                    work_type=chat_request.work_type or 'acadêmico',
+                    history=chat_request.history
+                )
+
+            # Auto-revisão do texto gerado
+            from services.ai import review_generated_text
+            review = review_generated_text(
+                text=generated_text,
                 section_type=section_type,
                 format_type=chat_request.format_type.value,
-                knowledge_area=chat_request.knowledge_area or 'geral',
-                work_type=chat_request.work_type or 'acadêmico'
+                instruction=instruction
             )
+            
+            # Se a revisão corrigiu o texto, usar a versão corrigida
+            final_text = review["corrected_text"]
+            review_score = review["score"]
+            was_reviewed = review_score >= 0  # -1 = erro na revisão
 
-            word_count = len(generated_text.split())
+            word_count = len(final_text.split())
 
-            # Resposta formatada com indicação de que usou os documentos
+            # Resposta conversacional natural
             docs_note = ""
             if has_pdf_context and pdf_info:
-                docs_note = f"📚 *Baseado em {pdf_info.get('pdf_count', 0)} documento(s) de referência*"
+                docs_note = f", baseado em {pdf_info.get('pdf_count', 0)} documento(s) de referência"
 
-            response_msg = f"**Texto gerado com IA ({section_type}):**\n{docs_note}\n\n{generated_text}\n\n---\n*Para inserir, clique no botão.*"
+            section_labels = {
+                "introducao": "uma introdução",
+                "conclusao": "uma conclusão",
+                "metodologia": "uma seção de metodologia",
+                "resultados": "uma seção de resultados",
+                "resumo": "um resumo",
+                "desenvolvimento": "um desenvolvimento",
+                "referencias": "referências",
+                "referencial": "um referencial teórico",
+                "geral": "o texto solicitado"
+            }
+            section_label = section_labels.get(section_type, "o texto solicitado")
+
+            # Montar mensagem com info de revisão
+            review_note = ""
+            if was_reviewed and review_score >= 7:
+                review_note = f" ✅ Revisado (nota {review_score}/10)."
+            elif was_reviewed and review["was_corrected"]:
+                review_note = f" ✏️ Revisado e aprimorado (nota {review_score}→ melhorado)."
+
+            response_msg = f"Pronto! Gerei {section_label} com **{word_count} palavras**{docs_note}.{review_note} Confira abaixo e insira no documento quando desejar."
 
             return ChatResponse(
                 message=response_msg,
                 context_info=context_info,
-                generated_content=generated_text
+                generated_content=final_text,
+                was_reviewed=was_reviewed,
+                review_score=review_score if was_reviewed else None
             )
 
         else:
@@ -684,7 +713,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             proj_mem_dict = chat_request.project_memory.dict() if chat_request.project_memory else None
 
             response_text = chat_with_document(
-                document_text=context,
+                document_text=context[:50000],
                 user_message=chat_request.message,
                 format_type=chat_request.format_type.value,
                 knowledge_area=chat_request.knowledge_area or 'geral',
@@ -693,6 +722,23 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 project_memory=proj_mem_dict,
                 events=chat_request.events
             )
+
+            # Análise proativa (apenas se tiver contexto suficiente)
+            proactive_suggestions = []
+            if len(context) > 500 and "Erro" not in response_text:
+                try:
+                    from services.ai import analyze_document_gaps
+                    gaps = analyze_document_gaps(context, norm=chat_request.format_type.value)
+                    
+                    for gap in gaps:
+                        proactive_suggestions.append(ProactiveSuggestion(
+                            type=gap["type"],
+                            message=gap["message"],
+                            action=gap["action"],
+                            section_type=gap["section_type"]
+                        ))
+                except Exception as e:
+                    print(f"Erro na análise proativa: {e}")
 
             # Sugestões contextualizadas
             suggestions = []
@@ -712,7 +758,8 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             return ChatResponse(
                 message=response_text,
                 suggestions=suggestions,
-                context_info=context_info
+                context_info=context_info,
+                proactive_suggestions=proactive_suggestions if proactive_suggestions else None
             )
 
     except Exception as e:
@@ -877,3 +924,14 @@ async def generate_chart_endpoint(request: ChartRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar gráfico: {str(e)}")
+@router.post("/review-selection", response_model=InlineReviewResponse)
+async def review_selection_endpoint(request: InlineReviewRequest):
+    """
+    Revisa um trecho de texto selecionado (gramática, estilo, clareza).
+    """
+    result = review_selection(
+        text=request.selected_text,
+        instruction=request.instruction,
+        format_type=request.format_type.value
+    )
+    return InlineReviewResponse(**result)

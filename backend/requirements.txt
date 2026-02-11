@@ -13,3 +13,4 @@ httpx
 matplotlib
 slowapi
 python-dotenv
+numpy

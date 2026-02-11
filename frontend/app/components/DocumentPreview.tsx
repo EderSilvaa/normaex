@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { FileText, Loader2, RefreshCw, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { API_URL } from '../lib/config';
 
 interface DocumentPreviewProps {
   filename: string;
@@ -39,7 +40,7 @@ export default function DocumentPreview({
     setError(null);
 
     try {
-      const response = await fetch(`http://localhost:8080/api/documents/preview/${encodeURIComponent(filename)}`);
+      const response = await fetch(`${API_URL}/api/documents/preview/${encodeURIComponent(filename)}`);
 
       if (!response.ok) {
         throw new Error('Documento não encontrado');

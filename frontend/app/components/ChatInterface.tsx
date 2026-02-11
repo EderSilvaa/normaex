@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { Send, Bot, User, Sparkles, CheckCircle, Download, Loader2, PenTool, FileText, Eye, EyeOff } from 'lucide-react';
+import { API_URL } from '../lib/config';
 import DocumentPreview from './DocumentPreview';
 
 interface Issue {
@@ -125,7 +126,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
         }]);
 
         try {
-            const response = await axios.post('http://localhost:8080/api/documents/apply', {
+            const response = await axios.post(`${API_URL}/api/documents/apply`, {
                 filename: filename
             });
 
@@ -155,7 +156,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
             // Mensagem final de sucesso
             await new Promise(resolve => setTimeout(resolve, 500));
             setIsFormatted(true);
-            setDownloadUrl(`http://localhost:8080/api/documents/download/formatted_${filename}`);
+            setDownloadUrl(`${API_URL}/api/documents/download/formatted_${filename}`);
 
             // Atualizar preview novamente para garantir
             setPreviewKey(prev => prev + 1);
@@ -196,7 +197,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
         setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
 
         try {
-            const response = await fetch('http://localhost:8080/api/documents/write-stream', {
+            const response = await fetch(`${API_URL}/api/documents/write-stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -243,7 +244,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
                                             content: successMsg,
                                             type: 'write',
                                             generatedText: data.generated_text,
-                                            downloadUrl: `http://localhost:8080${data.download_url}`
+                                            downloadUrl: `${API_URL}${data.download_url}`
                                         }]);
                                     }
                                 }
@@ -279,7 +280,7 @@ export default function ChatInterface({ filename, analysis }: ChatInterfaceProps
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://localhost:8080/api/documents/chat', {
+            const response = await axios.post(`${API_URL}/api/documents/chat`, {
                 filename: filename,
                 message: userMessage
             });

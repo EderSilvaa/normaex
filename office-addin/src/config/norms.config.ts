@@ -65,7 +65,7 @@ export const ABNT_CONFIG: NormConfig = {
     id: 'abnt',
     name: 'ABNT',
     fullName: 'Associação Brasileira de Normas Técnicas',
-    description: 'Padrão brasileiro para trabalhos acadêmicos',
+    description: 'Padrão brasileiro (NBR 14724)',
     icon: '🇧🇷',
     areas: ['direito', 'administracao', 'economia', 'letras', 'historia', 'ciencias_sociais', 'outras'],
     citationStyle: {
@@ -84,19 +84,19 @@ export const ABNT_CONFIG: NormConfig = {
     },
     referenceOrder: 'alphabetical',
     specificRules: [
-        'Citações diretas com mais de 3 linhas: recuo de 4cm, fonte 10pt, sem aspas',
-        'Espaçamento simples em citações longas, legendas e notas',
-        'Títulos de seção primária em negrito e maiúsculas',
-        'Folha de rosto obrigatória com natureza do trabalho',
+        'Citações diretas > 3 linhas: recuo 4cm, fonte 10, simples',
+        'Títulos: Negrito, caixa alta para primários',
+        'Espaçamento 1.5 no texto, simples em citações/notas',
+        'Margens: 3cm sup/esq, 2cm inf/dir',
     ],
 };
 
-// Configuração APA
+// Configuração APA (7th Edition)
 export const APA_CONFIG: NormConfig = {
     id: 'apa',
     name: 'APA',
-    fullName: 'American Psychological Association',
-    description: 'Padrão internacional para Psicologia e Educação',
+    fullName: 'American Psychological Association (7ª Ed.)',
+    description: 'Padrão internacional (Psicologia, Educação)',
     icon: '🧠',
     areas: ['psicologia', 'educacao', 'ciencias_sociais'],
     citationStyle: {
@@ -108,18 +108,17 @@ export const APA_CONFIG: NormConfig = {
         fontName: 'Times New Roman',
         fontSize: 12,
         lineSpacing: 2.0,
-        alignment: 'left',
-        margins: { top: 2.54, bottom: 2.54, left: 2.54, right: 2.54 },
-        firstLineIndent: 1.27,
-        quoteLongFormat: { minWords: 40, fontSize: 12, indent: 1.27 },
+        alignment: 'left', // APA prefere alinhado à esquerda (ragged right)
+        margins: { top: 2.54, bottom: 2.54, left: 2.54, right: 2.54 }, // 1 polegada
+        firstLineIndent: 1.27, // 0.5 polegada
+        quoteLongFormat: { minWords: 40, fontSize: 12, indent: 1.27 }, // Mantém fonte 12, recuo 0.5"
     },
     referenceOrder: 'alphabetical',
     specificRules: [
-        'Cabeçalho com título resumido e número de página',
-        'Citações em bloco com mais de 40 palavras: recuo de 0.5" sem aspas',
-        'Títulos com 5 níveis de hierarquia bem definidos',
-        'Abstract obrigatório em inglês',
-        'Espaçamento duplo em todo o documento',
+        'Espaçamento duplo em todo o documento (inclusive ref.)',
+        'Sem justificação (alinhado à esquerda)',
+        'Citações longas (>40 palavras): recuo 1.27cm, sem aspas',
+        'Cabeçalho: Apenas número da página (Student) ou Running Head (Pro)',
     ],
 };
 
@@ -127,31 +126,30 @@ export const APA_CONFIG: NormConfig = {
 export const VANCOUVER_CONFIG: NormConfig = {
     id: 'vancouver',
     name: 'Vancouver',
-    fullName: 'International Committee of Medical Journals',
-    description: 'Padrão para Medicina e Ciências da Saúde',
+    fullName: 'Vancouver Style (ICMJE)',
+    description: 'Padrão biomédico e saúde',
     icon: '⚕️',
     areas: ['medicina', 'enfermagem'],
     citationStyle: {
         type: 'numeric',
-        format: '(número) ou [número]',
-        example: '...conforme estudo anterior (1) ou ...anterior¹',
+        format: '(1) ou [1] ou sobrescrito¹',
+        example: '...conforme estudo (1).',
     },
     formatting: {
-        fontName: 'Arial',
+        fontName: 'Times New Roman', // Muito comum, embora não estrito
         fontSize: 12,
-        lineSpacing: 1.5,
+        lineSpacing: 1.5, // Comum, mas pode variar por journal
         alignment: 'justified',
-        margins: { top: 3, bottom: 2, left: 3, right: 2 },
-        firstLineIndent: 0,
-        quoteLongFormat: { minWords: 40, fontSize: 10, indent: 2.5 },
+        margins: { top: 2.54, bottom: 2.54, left: 2.54, right: 2.54 },
+        firstLineIndent: 0, // Geralmente sem recuo ou recuo padrão
+        quoteLongFormat: { minWords: 40, fontSize: 11, indent: 2.5 },
     },
     referenceOrder: 'appearance',
     specificRules: [
-        'Citações numéricas na ordem de aparição no texto',
-        'Referências numeradas sequencialmente',
-        'Até 6 autores: listar todos. Mais de 6: primeiros 6 + et al.',
-        'Abreviações de periódicos conforme Index Medicus',
-        'Formato IMRAD recomendado (Introdução, Métodos, Resultados, Discussão)',
+        'Citações numéricas sequenciais',
+        'Referências listadas por ordem de citação',
+        'Títulos de periódicos abreviados (NLM)',
+        'Até 6 autores cita todos, >6 et al.',
     ],
 };
 
@@ -159,31 +157,30 @@ export const VANCOUVER_CONFIG: NormConfig = {
 export const IEEE_CONFIG: NormConfig = {
     id: 'ieee',
     name: 'IEEE',
-    fullName: 'Institute of Electrical and Electronics Engineers',
-    description: 'Padrão para Engenharias e Tecnologia',
+    fullName: 'IEEE Style',
+    description: 'Engenharias e Computação',
     icon: '⚡',
     areas: ['engenharia', 'computacao'],
     citationStyle: {
         type: 'numeric',
-        format: '[número]',
-        example: '...como demonstrado em [1], [2]...',
+        format: '[1]',
+        example: '...como visto em [1].',
     },
     formatting: {
         fontName: 'Times New Roman',
-        fontSize: 10,
-        lineSpacing: 1.0,
+        fontSize: 10, // IEEE usa fonte menor geralmente (duas colunas) ou 12 (draft)
+        lineSpacing: 1.0, // Simples
         alignment: 'justified',
-        margins: { top: 2.54, bottom: 2.54, left: 1.75, right: 1.75 },
+        margins: { top: 1.9, bottom: 1.9, left: 1.3, right: 1.3 }, // Margens menores (variável)
         firstLineIndent: 0.5,
         quoteLongFormat: { minWords: 40, fontSize: 9, indent: 1 },
     },
     referenceOrder: 'appearance',
     specificRules: [
-        'Citações numéricas entre colchetes [1]',
-        'Referências na ordem de aparição',
-        'Formato de duas colunas comum em artigos',
-        'Títulos de seção em números romanos',
-        'Equações numeradas à direita',
+        'Citações sempre entre colchetes [1]',
+        'Texto geralmente em duas colunas (papers)',
+        'Referências numeradas [1] Author...',
+        'Títulos de figuras abaixo, tabelas acima',
     ],
 };
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { Upload, FileText, Loader2, ArrowRight, X, File, CheckCircle2 } from 'lucide-react';
+import { API_URL } from '../lib/config';
 import Editor from './Editor/Editor';
 
 interface Issue {
@@ -65,7 +66,7 @@ export default function FileUpload() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:8080/api/documents/upload', formData, {
+      const response = await axios.post(`${API_URL}/api/documents/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

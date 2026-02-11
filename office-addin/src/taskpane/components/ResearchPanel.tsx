@@ -18,6 +18,7 @@ interface ResearchPanelProps {
     knowledgeArea?: string;
     onInsertReference?: (text: string) => void;
     onStructureGenerated?: (structure: string) => void;
+    onSaveReference?: (reference: any) => void;
     mode?: 'inline' | 'modal';
 }
 
@@ -27,6 +28,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
     knowledgeArea = 'geral',
     onInsertReference,
     onStructureGenerated,
+    onSaveReference,
     mode = 'inline'
 }) => {
     const [query, setQuery] = useState('');
@@ -230,8 +232,13 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
                                         {/* Actions */}
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             <Button size="sm" fullWidth variant="primary" onClick={() => handleCopyReference(item.reference)}>
-                                                📋 Inserir Referência
+                                                📋 Inserir
                                             </Button>
+                                            {onSaveReference && (
+                                                <Button size="sm" fullWidth variant="secondary" onClick={() => onSaveReference(item)}>
+                                                    💾 Salvar
+                                                </Button>
+                                            )}
                                             {item.url && (
                                                 <Button size="sm" variant="secondary" onClick={() => window.open(item.url, '_blank')}>
                                                     🔗 Ver Original

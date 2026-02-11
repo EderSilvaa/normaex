@@ -10,6 +10,7 @@ import Toolbar from './Toolbar';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
+import { API_URL } from '../../lib/config';
 
 interface EditorProps {
     filename: string;
@@ -27,7 +28,7 @@ export default function Editor({ filename }: EditorProps) {
             try {
                 setLoading(true);
                 // Using the new endpoint we just created
-                const response = await axios.get(`http://localhost:8080/api/documents/html/${filename}`);
+                const response = await axios.get(`${API_URL}/api/documents/html/${filename}`);
                 setContent(response.data.html);
             } catch (error) {
                 console.error('Error fetching document content:', error);

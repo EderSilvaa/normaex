@@ -45,16 +45,48 @@ def organize_references_ai(text_content: str) -> str:
         {text_content}
         """
 
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": 4096,
+            "temperature": 0.3,
+        })
         return response.text
     except Exception as e:
         print(f"Erro na IA: {e}")
         return text_content
 
 
+
+def detect_write_intent(message: str) -> str:
+    """
+    Detecta se o usuário quer que a IA escreva um texto.
+    Retorna 'write' ou 'chat'.
+    """
+    try:
+        model = get_model()
+        prompt = f"""
+        Classifique a intenção do usuário em 'write' (escrever texto, gerar conteúdo, criar capítulo) ou 'chat' (pergunta, dúvida, conversa).
+        
+        Exemplos:
+        "Escreva uma introdução sobre IA" -> write
+        "Gere um resumo deste texto" -> write
+        "Como cito ABNT?" -> chat
+        "O que é metodologia?" -> chat
+        "Crie um tópico sobre resultados" -> write
+
+        Mensagem: "{message}"
+        
+        Responda APENAS 'write' ou 'chat'.
+        """
+        response = model.generate_content(prompt)
+        intent = response.text.strip().lower()
+        return intent if intent in ['write', 'chat'] else 'chat'
+    except:
+        return 'chat'
+
+
 def chat_with_document(
     document_text: str, 
-    user_message: str,
+    user_message: str, 
     format_type: str = "abnt",
     knowledge_area: str = "geral",
     work_type: str = "acadêmico",
@@ -62,66 +94,99 @@ def chat_with_document(
     project_memory: dict = None,
     events: list = None
 ) -> str:
+    """
+    Chat contextualizado com o documento.
+    Usa RAG se o documento for muito grande (> 30k caracteres).
+    """
     try:
         model = get_model()
-        
-        # Construir Prompt Rico com Contexto
-        
-        # 1. Memória do Projeto (Estrutura e Referências)
+
+        # 1. Preparar Histórico
+        history_context = ""
+        if history:
+            recent_history = history[-10:]
+            history_text = ""
+            for msg in recent_history:
+                role = "USUÁRIO" if msg.get('role') == 'user' else "ASSISTENTE"
+                history_text += f"{role}: {msg.get('content', '')}\n"
+            history_context = f"\n[HISTÓRICO DA CONVERSA]\n{history_text}\n"
+
+        # 2. Memória do Projeto (Rico)
         memory_context = ""
         if project_memory:
             structure = project_memory.get('structure', '')
             saved_refs = project_memory.get('saved_references', [])
             
+            memory_lines = [
+                f"- Objetivo: {project_memory.get('core_objective', 'Não definido')}",
+                f"- Estilo: {project_memory.get('tone_style', 'Formal')}",
+                f"- Preferências: {project_memory.get('user_preferences', 'Nenhuma')}"
+            ]
+            
             if structure:
-                memory_context += f"\n[ESTRUTURA DO PROJETO]\n{structure}\n"
+                memory_lines.append(f"\n[ESTRUTURA DO PROJETO]\n{structure}")
             
             if saved_refs:
                 refs_text = "\n".join([f"- {r.get('citation', '')}: {r.get('title', '')}" for r in saved_refs])
-                memory_context += f"\n[REFERÊNCIAS JÁ SELECIONADAS PELO USUÁRIO]\n{refs_text}\n(Priorize usar essas referências quando pertinente)\n"
+                memory_lines.append(f"\n[REFERÊNCIAS SALVAS]\n{refs_text}")
+                
+            memory_context = "\nMEMÓRIA DO PROJETO:\n" + "\n".join(memory_lines)
 
-        # 2. Eventos Recentes (Ações do sistema)
+        # 3. Eventos Recentes
         events_context = ""
         if events:
-            # Pegar os últimos 5 eventos
-            recent_events = events[-5:] if len(events) > 5 else events
-            events_text = "\n".join([f"- {e}" for e in recent_events])
-            events_context = f"\n[AÇÕES RECENTES DO USUÁRIO NA FERRAMENTA]\n{events_text}\n"
+            recent_events = events[-5:]
+            events_list = "\n".join([f"- {e.get('type')}: {e.get('description')}" for e in recent_events])
+            events_context = f"\nEVENTOS RECENTES:\n{events_list}"
 
-        # 3. Histórico de Conversa
-        history_context = ""
-        if history:
-            # Formatar últimos 10 turnos
-            recent_history = history[-10:] if len(history) > 10 else history
-            history_text = ""
-            for msg in recent_history:
-                role = "USUÁRIO" if msg.get('role') == 'user' else "ASSISTENTE"
-                history_text += f"{role}: {msg.get('content', '')}\n"
+        # 4. Lógica de RAG para documentos grandes
+        context_to_use = document_text[:50000] # Default safe limit
+        use_rag = len(document_text) > 30000
+        rag_note = ""
+
+        if use_rag:
+            # Verificar se é pedido de resumo (RAG é ruim para resumos globais)
+            is_summary_request = any(term in user_message.lower() for term in ["resuma", "resumo", "analise", "visão geral", "do que se trata"])
             
-            history_context = f"\n[HISTÓRICO DA CONVERSA]\n{history_text}\n"
+            if not is_summary_request:
+                try:
+                    from services.rag import rag_service
+                    # Chunking (rápido se já estiver em cache)
+                    rag_service.chunk_document(document_text)
+                    
+                    # Recuperar trechos relevantes
+                    chunks = rag_service.retrieve(user_message, top_k=5)
+                    
+                    if chunks:
+                        context_to_use = "\n---\n".join(chunks)
+                        rag_note = "[Modo RAG: Analisando trechos relevantes do documento]"
+                        print(f"[Chat] Usando RAG. Contexto reduzido de {len(document_text)} para {len(context_to_use)} chars.")
+                except Exception as e:
+                    print(f"[Chat] Falha no RAG, usando texto completo: {e}")
 
-        prompt = f"""
-        Você é um assistente acadêmico especializado em normas {format_type.upper()} e escrita científica.
-        Área: {knowledge_area}
-        Tipo: {work_type}
-        
-        {memory_context}
-        {events_context}
+        # Construir o prompt
+        prompt = f"""Você é um assistente acadêmico especializado em normas {format_type.upper()}.
+Mantenha tom formal e acadêmico. {rag_note}
 
-        CONTEXTO DO DOCUMENTO ATUAL (WORD):
-        {document_text[:100000]}
+{memory_context}
+{events_context}
 
-        {history_context}
+CONTEXTO DO DOCUMENTO:
+{context_to_use}
 
-        [PERGUNTA ATUAL DO USUÁRIO]
-        {user_message}
+{history_context}
 
-        Responda de forma útil, direta e em português. 
-        Use as informações de memória e histórico para dar respostas contextualizadas.
-        Se o usuário pedir para melhorar algo "anterior", consulte o histórico.
-        """
+[PERGUNTA ATUAL DO USUÁRIO]
+{user_message}
 
-        response = model.generate_content(prompt)
+Responda de forma útil, direta e em português.
+Use as informações de memória e histórico para dar respostas contextualizadas.
+"""
+
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": 4096,
+            "temperature": 0.6,
+        })
         return response.text
     except Exception as e:
         return f"Erro ao processar mensagem: {str(e)}"
@@ -159,13 +224,91 @@ def get_norm_rules(format_type: str) -> str:
     }
     return rules.get(format_type.lower(), rules["abnt"])
 
+
+async def generate_citations_with_real_sources(
+    document_context: str,
+    instruction: str,
+    format_type: str = "abnt",
+    knowledge_area: str = "geral",
+    num_refs: int = 8
+) -> str:
+    """
+    Gera citações usando papers REAIS buscados em APIs acadêmicas.
+    Nunca inventa referências.
+    """
+    try:
+        model = get_model()
+
+        # 1. Extrair keywords de busca do contexto e instrução
+        keywords_prompt = f"""Extraia 2-3 termos de busca acadêmica (em inglês, separados por vírgula) baseados no contexto abaixo.
+Os termos devem ser relevantes para encontrar papers acadêmicos sobre o tema.
+
+CONTEXTO DO DOCUMENTO: {document_context[:3000]}
+INSTRUÇÃO: {instruction}
+ÁREA: {knowledge_area}
+
+Responda APENAS com os termos separados por vírgula, sem explicações. Ex: "artificial intelligence education, machine learning higher education"
+"""
+        keywords_response = model.generate_content(keywords_prompt, generation_config={
+            "max_output_tokens": 100,
+            "temperature": 0.3,
+        })
+        search_query = keywords_response.text.strip().strip('"')
+        print(f"[Citations] Keywords extraídas: {search_query}")
+
+        # 2. Buscar papers reais
+        from services.academic_search import academic_search
+        papers = await academic_search.search_all_sources(search_query, limit=num_refs)
+
+        if not papers:
+            # Fallback: tentar com query mais simples
+            simple_query = knowledge_area.replace("geral", instruction[:50])
+            papers = await academic_search.search_all_sources(simple_query, limit=num_refs)
+
+        if not papers:
+            return "Não foi possível encontrar referências reais para o tema. Tente refinar o tema ou a área de conhecimento."
+
+        # 3. Formatar com IA usando dados REAIS
+        papers_text = academic_search.format_papers_for_prompt(papers)
+
+        format_prompt = f"""Formate as referências abaixo no padrão {format_type.upper()}.
+Use APENAS os dados fornecidos. NÃO invente ou altere nenhum dado (autores, anos, títulos, DOIs).
+
+PAPERS REAIS ENCONTRADOS:
+{papers_text}
+
+REGRAS:
+1. Use EXATAMENTE os nomes dos autores, títulos e anos fornecidos
+2. Formate segundo a norma {format_type.upper()}
+3. Ordene alfabeticamente pelo sobrenome do primeiro autor
+4. Mantenha os DOIs como links
+5. NÃO adicione papers que não estão na lista acima
+6. Retorne APENAS as referências formatadas, uma por linha
+
+Formate agora:"""
+
+        format_response = model.generate_content(format_prompt, generation_config={
+            "max_output_tokens": 4096,
+            "temperature": 0.2,
+        })
+
+        result = format_response.text.strip()
+        print(f"[Citations] Geradas {len(papers)} referências reais")
+        return result
+
+    except Exception as e:
+        print(f"[Citations] Erro: {e}")
+        return f"Erro ao buscar referências: {str(e)}"
+
+
 def generate_academic_text(
     document_context: str, 
     instruction: str, 
     section_type: str,
     format_type: str = "abnt",
     knowledge_area: str = "geral",
-    work_type: str = "acadêmico"
+    work_type: str = "acadêmico",
+    history: list = None
 ) -> str:
     """
     Gera texto acadêmico seguindo normas especificadas baseado no contexto do documento.
@@ -220,6 +363,37 @@ def generate_academic_text(
         guidelines = section_guidelines.get(section_type.lower(), section_guidelines["geral"])
         norm_rules = get_norm_rules(format_type)
 
+        # Limites dinâmicos por tipo de seção
+        section_token_limits = {
+            "introducao": 4096,
+            "conclusao": 4096,
+            "resumo": 2048,
+            "metodologia": 6144,
+            "resultados": 8192,
+            "desenvolvimento": 16384,
+            "referencial": 8192,
+            "referencias": 4096,
+            "geral": 8192,
+        }
+        max_tokens = section_token_limits.get(section_type.lower(), 8192)
+
+        # Construir histórico de conversa para evitar repetições
+        history_context = ""
+        if history:
+            recent = history[-10:] if len(history) > 10 else history
+            history_text = ""
+            for msg in recent:
+                role = "USUÁRIO" if msg.get('role') == 'user' else "ASSISTENTE"
+                content = msg.get('content', '')
+                # Truncar mensagens longas no histórico
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                history_text += f"{role}: {content}\n"
+            history_context = f"""
+        HISTÓRICO DA CONVERSA (para contexto - NÃO repita textos já gerados):
+        {history_text}
+        """
+
         prompt = f"""
         Você é um especialista em escrita acadêmica seguindo normas {format_type.upper()}.
         Área de Conhecimento: {knowledge_area}
@@ -227,8 +401,9 @@ def generate_academic_text(
 
         CONTEXTO DO DOCUMENTO DO USUÁRIO:
         {document_context[:20000]}
+        {history_context}
 
-        INSTRUÇÃO DO USUÁRIO:
+        INSTRUÇÃO ATUAL DO USUÁRIO:
         {instruction}
 
         TIPO DE SEÇÃO: {section_type}
@@ -242,19 +417,145 @@ def generate_academic_text(
         REGRAS ADICIONAIS:
         1. Mantenha coerência com o restante do documento
         2. Adapte o tom para a área de {knowledge_area}
+        3. NÃO repita textos já gerados anteriormente na conversa
+        4. Gere conteúdo NOVO e diferente do que já foi produzido
 
         IMPORTANTE:
         - Retorne APENAS o texto gerado, sem explicações ou comentários
         - O texto deve estar pronto para ser inserido no documento
         - Mantenha o mesmo estilo e tom do documento original
+        - Foque especificamente no que o usuário pediu AGORA
 
         Gere o texto solicitado:
         """
 
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": max_tokens,
+            "temperature": 0.7,
+        })
         return response.text.strip()
     except Exception as e:
         return f"Erro ao gerar texto: {str(e)}"
+
+
+def analyze_document_gaps(document_text: str, norm: str = "abnt") -> list[dict]:
+    """
+    Analisa o documento e sugere melhorias proativas.
+    Retorna lista de sugestões: [{type, message, action, section_type}]
+    """
+    if len(document_text) < 100:
+        return []
+
+    try:
+        model = get_model()
+        prompt = f"""Analise este texto acadêmico ({norm.upper()}) e identifique 3 melhorias críticas.
+Foque em estrutura, conteúdo faltando ou pouco desenvolvido.
+
+TEXTO DO DOCUMENTO:
+{document_text[:15000]}
+
+Responda APENAS com JSON válido, sem markdown:
+[
+  {{"type": "missing_section" | "weak_content" | "citation_needed" | "formatting", 
+    "message": "Explicação curta do problema", 
+    "action": "Ação sugerida curta (ex: 'Expandir Conclusão')", 
+    "section_type": "introducao" | "desenvolvimento" | "conclusao" | "referencias"}}
+]
+
+Exemplos:
+- Conclusão muito curta -> {{"type": "weak_content", "message": "Conclusão muito breve", "action": "Expandir Conclusão", "section_type": "conclusao"}}
+- Sem citações -> {{"type": "citation_needed", "message": "Faltam citações no texto", "action": "Adicionar Citações", "section_type": "referencias"}}
+"""
+
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": 1024,
+            "temperature": 0.2,
+        })
+
+        text = response.text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        import json
+        suggestions = json.loads(text)
+        # Limitar a 3 e validar estrutura
+        return [s for s in suggestions if isinstance(s, dict) and "message" in s][:3]
+
+    except Exception as e:
+        print(f"[GapAnalysis] Erro: {e}")
+        return []
+
+
+def review_generated_text(
+    text: str,
+    section_type: str,
+    format_type: str = "abnt",
+    instruction: str = ""
+) -> dict:
+    """
+    Auto-revisa texto gerado pela IA antes de entregar ao usuário.
+    Retorna: {score, issues, corrected_text, was_corrected}
+    """
+    try:
+        model = get_model()
+        prompt = f"""Você é um revisor acadêmico rigoroso. Avalie o texto abaixo que foi gerado para a seção "{section_type}" de um trabalho acadêmico seguindo normas {format_type.upper()}.
+
+INSTRUÇÃO ORIGINAL DO USUÁRIO: {instruction}
+
+TEXTO GERADO:
+{text[:8000]}
+
+Avalie os seguintes critérios (0-10 cada):
+1. Coerência e fluxo lógico
+2. Tom acadêmico e formalidade
+3. Ausência de repetições
+4. Adequação à seção ({section_type})
+5. Aderência à norma {format_type.upper()}
+
+Responda APENAS com JSON válido, sem markdown:
+{{"score": <média 0-10>, "issues": ["problema1", "problema2"], "corrected_text": "<texto corrigido se score < 7, senão string vazia>"}}
+
+REGRAS:
+- Se score >= 7: texto está bom, retorne "corrected_text": ""
+- Se score < 7: corrija os problemas e retorne o texto melhorado em "corrected_text"
+- "issues" deve listar problemas encontrados (pode ser vazio se score >= 9)
+- Seja objetivo nas issues, máximo 3 itens"""
+
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": 8192,
+            "temperature": 0.2,
+        })
+        
+        result_text = response.text.strip()
+        
+        # Limpar markdown se presente
+        if result_text.startswith("```"):
+            result_text = result_text.split("\n", 1)[1]
+            result_text = result_text.rsplit("```", 1)[0].strip()
+
+        import json
+        result = json.loads(result_text)
+        
+        score = result.get("score", 10)
+        corrected = result.get("corrected_text", "")
+        was_corrected = bool(corrected and score < 7)
+        
+        print(f"[Auto-Review] section={section_type}, score={score}, issues={len(result.get('issues', []))}, corrected={was_corrected}")
+        
+        return {
+            "score": score,
+            "issues": result.get("issues", []),
+            "corrected_text": corrected if was_corrected else text,
+            "was_corrected": was_corrected
+        }
+    except Exception as e:
+        print(f"[Auto-Review] Erro: {e}")
+        return {
+            "score": -1,
+            "issues": [],
+            "corrected_text": text,
+            "was_corrected": False
+        }
 
 
 async def generate_academic_text_stream(
@@ -330,57 +631,78 @@ async def generate_academic_text_stream(
     Retorne APENAS o texto gerado, sem explicações.
     """
 
-    response = model.generate_content(prompt, stream=True)
+    # Limites dinâmicos por tipo de seção
+    section_token_limits = {
+        "introducao": 4096,
+        "conclusao": 4096,
+        "resumo": 2048,
+        "metodologia": 6144,
+        "resultados": 8192,
+        "desenvolvimento": 16384,
+        "referencial": 8192,
+        "geral": 8192,
+    }
+    max_tokens = section_token_limits.get(section_type.lower(), 8192)
+
+    response = model.generate_content(prompt, generation_config={
+        "max_output_tokens": max_tokens,
+        "temperature": 0.7,
+    }, stream=True)
 
     for chunk in response:
         if chunk.text:
             yield chunk.text
 
 
-def detect_write_intent(message: str) -> dict:
+def detect_write_intent_ai(message: str) -> dict:
     """
-    Detecta se o usuário quer escrever algo no documento e extrai informações.
+    Usa IA para detectar se o usuário quer escrever algo e classificar o tipo de seção.
+    Retorna dict com is_write_request, section_type, instruction.
     """
     try:
         model = get_model()
-        prompt = f"""
-        Analise a mensagem do usuário e determine se ele quer que você ESCREVA/GERE texto para o documento.
+        prompt = f"""Classifique a intenção do usuário. Ele está pedindo para GERAR/ESCREVER texto acadêmico para inserir no documento, ou está apenas CONVERSANDO/PERGUNTANDO?
 
-        MENSAGEM: {message}
+MENSAGEM: "{message}"
 
-        Responda APENAS em formato JSON válido:
-        {{
-            "is_write_request": true/false,
-            "section_type": "introducao" | "desenvolvimento" | "conclusao" | "metodologia" | "referencial" | "geral",
-            "instruction": "o que o usuário quer que seja escrito",
-            "position": "inicio" | "fim" | "apos_secao" | "substituir"
-        }}
+Responda APENAS com JSON válido, sem markdown:
+{{"is_write": true/false, "section_type": "...", "refined_instruction": "..."}}
 
-        Exemplos:
-        - "escreva uma introdução sobre..." -> is_write_request: true, section_type: "introducao"
-        - "adicione um parágrafo sobre..." -> is_write_request: true, section_type: "desenvolvimento"
-        - "o que você acha do meu texto?" -> is_write_request: false
-        - "reescreva a conclusão" -> is_write_request: true, section_type: "conclusao"
+Valores de section_type: "introducao", "desenvolvimento", "conclusao", "metodologia", "resultados", "resumo", "referencial", "referencias", "geral"
 
-        Retorne APENAS o JSON, sem markdown ou explicações.
-        """
+Exemplos:
+- "escreva uma introdução sobre IA" → {{"is_write": true, "section_type": "introducao", "refined_instruction": "Escrever introdução sobre Inteligência Artificial"}}
+- "me ajude com as citações" → {{"is_write": true, "section_type": "referencias", "refined_instruction": "Gerar citações e referências bibliográficas"}}
+- "preciso de um referencial teórico sobre machine learning" → {{"is_write": true, "section_type": "referencial", "refined_instruction": "Escrever referencial teórico sobre machine learning"}}
+- "como formatar as margens na ABNT?" → {{"is_write": false, "section_type": "geral", "refined_instruction": ""}}
+- "o que achou do meu texto?" → {{"is_write": false, "section_type": "geral", "refined_instruction": ""}}
+- "adicione um parágrafo sobre os riscos" → {{"is_write": true, "section_type": "desenvolvimento", "refined_instruction": "Escrever parágrafo sobre os riscos"}}
+- "faz a conclusão pra mim" → {{"is_write": true, "section_type": "conclusao", "refined_instruction": "Escrever a conclusão do trabalho"}}
+- "qual a diferença entre citação direta e indireta?" → {{"is_write": false, "section_type": "geral", "refined_instruction": ""}}
+- "reescreva esse trecho de forma mais formal" → {{"is_write": true, "section_type": "geral", "refined_instruction": "Reescrever trecho de forma mais formal"}}
+- "gere os resultados baseado nos dados" → {{"is_write": true, "section_type": "resultados", "refined_instruction": "Gerar seção de resultados baseado nos dados"}}"""
 
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": 256,
+            "temperature": 0.1,
+        })
         text = response.text.strip()
 
         # Limpar markdown se presente
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
-            text = text.rsplit("```", 1)[0]
+            text = text.rsplit("```", 1)[0].strip()
 
         import json
-        return json.loads(text)
+        result = json.loads(text)
+        print(f"[AI Intent] message='{message[:50]}...' → is_write={result.get('is_write')}, section={result.get('section_type')}")
+        return result
     except Exception as e:
+        print(f"[AI Intent] Erro: {e}")
         return {
-            "is_write_request": False,
+            "is_write": False,
             "section_type": "geral",
-            "instruction": message,
-            "position": "fim"
+            "refined_instruction": message
         }
 
 def suggest_structure(theme: str, work_type: str, knowledge_area: str, norm: str) -> str:
@@ -420,7 +742,10 @@ def suggest_structure(theme: str, work_type: str, knowledge_area: str, norm: str
         - ...
         """
 
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config={
+            "max_output_tokens": 4096,
+            "temperature": 0.7,
+        })
         return response.text.strip()
     except Exception as e:
         return f"Erro ao gerar estrutura: {str(e)}"

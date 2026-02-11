@@ -24,6 +24,8 @@ import {
   SearchResponse,
   StructureRequest,
   StructureResponse,
+  InlineReviewRequest,
+  InlineReviewResponse,
 } from '../types/api.types';
 
 // Detectar ambiente automaticamente
@@ -318,6 +320,16 @@ class ApiServiceClass {
    */
   async generateChart(request: ChartRequest): Promise<ChartResponse> {
     return this.request<ChartResponse>('/generate-chart', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Revisa trecho selecionado (Inline Review)
+   */
+  async reviewSelection(request: InlineReviewRequest): Promise<InlineReviewResponse> {
+    return this.request<InlineReviewResponse>('/review-selection', {
       method: 'POST',
       body: JSON.stringify(request),
     });

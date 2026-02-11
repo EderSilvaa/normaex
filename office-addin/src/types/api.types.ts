@@ -296,3 +296,20 @@ export interface StructureResponse {
   structure: string;
   message: string;
 }
+
+// ============================================
+// INLINE REVIEW
+// ============================================
+
+export interface InlineReviewRequest {
+  selected_text: string;
+  instruction?: string;
+  format_type: FormatType;
+}
+
+export interface InlineReviewResponse {
+  original_text: string;
+  corrected_text: string;
+  explanation: string;
+  changes: string[];
+}

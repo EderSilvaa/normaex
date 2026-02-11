@@ -45,8 +45,17 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
-  50% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: translateX(-50%) scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.15);
+  }
 }
 
 .app-header {
@@ -288,7 +297,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-container p {
@@ -435,4 +446,154 @@ body {
   .app-footer {
     padding: 10px;
   }
+}
+
+/* ===================================
+   CHAT MARKDOWN STYLES
+   =================================== */
+
+.chat-markdown p {
+  margin: 0 0 6px 0;
+}
+
+.chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+.chat-markdown em {
+  font-style: italic;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.chat-markdown li {
+  margin-bottom: 2px;
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4 {
+  margin: 8px 0 4px 0;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.chat-markdown h1 {
+  font-size: 1.1em;
+}
+
+.chat-markdown h2 {
+  font-size: 1.05em;
+}
+
+.chat-markdown h3 {
+  font-size: 1em;
+}
+
+.chat-markdown code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.chat-markdown blockquote {
+  border-left: 2px solid #Eebb4d;
+  margin: 6px 0;
+  padding: 4px 10px;
+  color: #aaa;
+  font-style: italic;
+}
+
+.chat-markdown hr {
+  border: none;
+  border-top: 1px solid #333;
+  margin: 8px 0;
+}
+
+/* ===================================
+   CONTENT CARD BODY  
+   Preview do texto gerado com parágrafos claros
+   =================================== */
+
+.content-card-body p {
+  margin: 0 0 14px 0;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid rgba(238, 187, 77, 0.3);
+  border-radius: 0 6px 6px 0;
+  text-indent: 1.25cm;
+  text-align: justify;
+}
+
+.content-card-body p:last-child {
+  margin-bottom: 0;
+}
+
+.content-card-body p:hover {
+  border-left-color: #Eebb4d;
+  background: rgba(238, 187, 77, 0.05);
+}
+
+.content-card-body strong {
+  font-weight: 700;
+  color: #e5e5e5;
+}
+
+.content-card-body em {
+  font-style: italic;
+  color: #bbb;
+}
+
+.content-card-body h1,
+.content-card-body h2,
+.content-card-body h3,
+.content-card-body h4 {
+  margin: 12px 0 6px 0;
+  font-weight: 700;
+  color: #Eebb4d;
+  line-height: 1.3;
+  font-size: 1em;
+  border-left: none;
+  padding: 0;
+  background: none;
+}
+
+.content-card-body ul,
+.content-card-body ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.content-card-body li {
+  margin-bottom: 4px;
+  padding: 2px 0;
+}
+
+/* Scrollbar do card */
+.content-card-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.content-card-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content-card-body::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 2px;
+}
+
+.content-card-body::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
