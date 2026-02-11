@@ -674,7 +674,8 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 
             return ChatResponse(
                 message=response_msg,
-                context_info=context_info
+                context_info=context_info,
+                generated_content=generated_text
             )
 
         else:

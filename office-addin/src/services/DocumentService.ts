@@ -75,6 +75,32 @@ class DocumentServiceClass {
   }
 
   /**
+   * Insere HTML na posição do cursor (substitui seleção)
+   */
+  async insertHtml(html: string, location: 'replace' | 'start' | 'end' = 'replace'): Promise<void> {
+    return new Promise((resolve, reject) => {
+      Word.run(async (context) => {
+        try {
+          const selection = context.document.getSelection();
+
+          const insertLocation =
+            location === 'replace'
+              ? Word.InsertLocation.replace
+              : location === 'start'
+                ? Word.InsertLocation.start
+                : Word.InsertLocation.end;
+
+          selection.insertHtml(html, insertLocation);
+          await context.sync();
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(reject);
+    });
+  }
+
+  /**
    * Insere texto na posição do cursor (substitui seleção)
    */
   async insertText(text: string, location: 'replace' | 'start' | 'end' = 'replace'): Promise<void> {

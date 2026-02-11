@@ -39,10 +39,10 @@ const getApiBaseUrl = (): string => {
 
     // Produção - usar API no mesmo domínio base ou subdomínio
     // Ajuste conforme sua configuração de deploy
-    return 'https://api.normaex.com.br/api/addin';
+    // return 'https://api.normaex.com.br/api/addin';
   }
 
-  // Fallback para SSR ou testes
+  // Fallback para SSR ou testes - FORÇANDO LOCALHOST PARA DEV
   return 'http://localhost:8000/api/addin';
 };
 

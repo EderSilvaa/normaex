@@ -5,6 +5,7 @@
 
 import * as React from 'react';
 import { useState, useRef, useEffect } from 'react';
+import { marked } from 'marked';
 import { DocumentService, ApiService } from '../../services';
 import type { ChartType } from '../../services';
 import { Button } from './ui/Button';
@@ -37,6 +38,7 @@ interface ChatResponseData {
   message: string;
   suggestions?: string[];
   context_info?: ContextInfo | null;
+  generated_content?: string | null;
 }
 
 interface ImageAttachment {
@@ -53,6 +55,7 @@ interface Message {
   content: string;
   timestamp: Date;
   hasGeneratedText?: boolean;
+  generatedContent?: string | null;
   contextInfo?: ContextInfo | null;
   image?: { caption: string; figureNumber?: number };
 }
@@ -66,8 +69,8 @@ interface SearchResult {
 }
 
 interface ChatPanelProps {
-  onSendMessage: (message: string) => Promise<ChatResponseData>;
-  onInsertText?: (text: string) => Promise<void>;
+  onSendMessage: (message: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) => Promise<ChatResponseData>;
+  onInsertText?: (text: string, isHtml?: boolean) => Promise<void>;
   isLoading?: boolean;
   placeholder?: string;
   welcomeMessage?: string;
@@ -80,6 +83,8 @@ interface ChatPanelProps {
   normName?: string;
   workType?: string;
   knowledgeArea?: string;
+  onSaveReference?: (ref: any) => void;
+  onStructureGenerated?: (structure: string) => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -97,6 +102,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   normName,
   workType,
   knowledgeArea,
+  onSaveReference,
+  onStructureGenerated,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -148,18 +155,47 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   // Extrair texto gerado da resposta
   const extractGeneratedText = (content: string): string | null => {
-    const match = content.match(/\*\*Texto gerado.*?\*\*:?\s*\n(?:.*\n)?\n([\s\S]*?)\n\n---/);
-    return match ? match[1].trim() : null;
+    // Encontrar o início (após o cabeçalho "**Texto gerado...")
+    const headerIdx = content.indexOf('**Texto gerado');
+    if (headerIdx === -1) return content; // Fallback: retorna texto completo
+
+    // Encontrar o separador "---"
+    const separatorIdx = content.indexOf('\n---', headerIdx);
+    if (separatorIdx === -1) return content; // Fallback: retorna texto completo
+
+    // Pegar tudo entre o fim da linha do cabeçalho e o separador
+    const afterHeader = content.indexOf('\n', headerIdx);
+    if (afterHeader === -1) return content; // Fallback: retorna conteúdo completo
+
+    let textBlock = content.substring(afterHeader, separatorIdx).trim();
+
+    // Remover nota de docs (linha com 📚) se existir
+    if (textBlock.startsWith('📚')) {
+      const nextLine = textBlock.indexOf('\n');
+      if (nextLine !== -1) {
+        textBlock = textBlock.substring(nextLine).trim();
+      }
+    }
+
+    return textBlock || content; // Fallback se bloco vazio
   };
 
   // Inserir texto no documento
-  const handleInsertText = async (messageId: string, content: string) => {
-    const text = extractGeneratedText(content);
+  const handleInsertText = async (messageId: string, content: string, preGeneratedText?: string | null) => {
+    const text = preGeneratedText || extractGeneratedText(content);
+    console.log('[DEBUG] Content length:', content.length);
+    console.log('[DEBUG] Text to insert length:', text?.length);
     if (!text || !onInsertText) return;
 
     setInserting(messageId);
     try {
-      await onInsertText(text);
+      // Converter Markdown para HTML
+      const html = await Promise.resolve(marked.parse(text)) as string;
+      console.log('[DEBUG] HTML to insert:', html.substring(0, 100));
+
+      await onInsertText(html, true); // true = isHtml
+    } catch (err) {
+      console.error('Erro ao converter ou inserir:', err);
     } finally {
       setInserting(null);
     }
@@ -455,13 +491,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setSending(true);
 
     try {
-      const response = await onSendMessage(userMessage.content);
+      // Preparar histórico (últimas 10 mensagens)
+      const historyPayload = messages.slice(-10).map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const response = await onSendMessage(userMessage.content, historyPayload);
       const assistantMessage: Message = {
         id: generateId(),
         role: 'assistant',
         content: response.message,
         timestamp: new Date(),
         contextInfo: response.context_info,
+        generatedContent: response.generated_content,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
@@ -516,7 +559,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         }}
       >
         {messages.map((message) => {
-          const generatedText = message.role === 'assistant' ? extractGeneratedText(message.content) : null;
+          const generatedText = message.generatedContent || (message.role === 'assistant' ? extractGeneratedText(message.content) : null);
           const isInsertingThis = inserting === message.id;
 
           return (
@@ -555,7 +598,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                     <Button
                       size="sm"
                       variant={message.role === 'user' ? 'secondary' : 'secondary'}
-                      onClick={() => handleInsertText(message.id, message.content)}
+                      onClick={() => handleInsertText(message.id, message.content, generatedText)}
                       disabled={isInsertingThis}
                       isLoading={isInsertingThis}
                       fullWidth
@@ -1429,6 +1472,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 }}
                 onStructureGenerated={(structure) => {
                   setShowResearchModal(false);
+                  onStructureGenerated?.(structure);
                   const newMessage: Message = {
                     id: Date.now().toString(),
                     role: 'assistant',
@@ -1437,6 +1481,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                   };
                   setMessages((prev) => [...prev, newMessage]);
                 }}
+                onSaveReference={onSaveReference}
                 mode="modal"
               />
             </div>

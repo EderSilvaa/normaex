@@ -163,11 +163,22 @@ class WriteResponse(BaseModel):
 # CHAT MODELS
 # ============================================
 
+class ProjectMemory(BaseModel):
+    """Memória persistente do projeto do usuário"""
+    structure: Optional[str] = Field(None, description="Estrutura gerada para o trabalho")
+    saved_references: List[Dict[str, Any]] = Field(default_factory=list, description="Referências salvas pelo usuário")
+
+
 class ChatRequest(BaseModel):
     """Solicitação de chat com contexto do documento"""
     message: str = Field(..., description="Mensagem do usuário")
     context: Optional[str] = Field(None, description="Contexto do documento (texto selecionado ou documento completo)")
     history: Optional[List[Dict[str, str]]] = Field(default_factory=list, description="Histórico de mensagens")
+    
+    # Novos campos de memória
+    project_memory: Optional[ProjectMemory] = Field(default_factory=ProjectMemory, description="Memória persistente do projeto")
+    events: Optional[List[str]] = Field(default_factory=list, description="Lista de eventos recentes do sistema")
+
     project_id: Optional[str] = Field(None, description="ID do projeto para incluir contexto de PDFs")
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
     work_type: Optional[str] = Field(None, description="Tipo de trabalho: tcc, artigo...")
@@ -188,6 +199,7 @@ class ChatResponse(BaseModel):
     message: str = Field(..., description="Resposta da IA")
     suggestions: Optional[List[str]] = Field(None, description="Sugestões de perguntas relacionadas")
     context_info: Optional[ContextInfo] = Field(None, description="Info sobre contexto de PDFs usado")
+    generated_content: Optional[str] = Field(None, description="Conteúdo limpo gerado para inserção")
 
 
 # ============================================

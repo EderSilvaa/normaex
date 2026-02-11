@@ -132,10 +132,20 @@ export interface WriteResponse {
 // CHAT
 // ============================================
 
+export interface ProjectMemory {
+  structure?: string | null;
+  saved_references?: Array<Record<string, unknown>>;
+}
+
 export interface ChatRequest {
   message: string;
   context?: string;
   history?: Array<{ role: string; content: string }>;
+
+  // Novos campos de memória
+  project_memory?: ProjectMemory;
+  events?: string[];
+
   project_id?: string;
   format_type?: FormatType;
   work_type?: string;
@@ -154,6 +164,7 @@ export interface ChatResponse {
   message: string;
   suggestions?: string[];
   context_info?: ContextInfo | null;
+  generated_content?: string | null;
 }
 
 // ============================================

@@ -184,13 +184,18 @@ const App: React.FC<AppProps> = ({ title }) => {
       message: result.message,
       suggestions: result.suggestions,
       context_info: result.context_info,
+      generated_content: result.generated_content,
     };
   }, [selectedProjectId, workConfig, projectMemory, events]);
 
   // Inserir texto no documento (usado pelo ChatPanel)
-  const handleInsertTextFromChat = useCallback(async (text: string) => {
+  const handleInsertTextFromChat = useCallback(async (text: string, isHtml: boolean = false) => {
     try {
-      await DocumentService.insertText(text);
+      if (isHtml) {
+        await DocumentService.insertHtml(text);
+      } else {
+        await DocumentService.insertText(text);
+      }
       setMessage('Texto inserido no documento!');
       logEvent('Inseriu texto gerado no documento.');
     } catch (error) {
