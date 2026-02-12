@@ -12,7 +12,11 @@ from typing import AsyncGenerator
 import json
 import asyncio
 import re
-# Rate limiter is configured in main.py
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+# Rate limiter compartilhado (registrado no main.py)
+limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 
 from models.addin_models import (
     DocumentContent,
@@ -55,7 +59,8 @@ router = APIRouter(prefix="/addin", tags=["Office Add-in"])
 # ============================================
 
 @router.post("/analyze-content", response_model=AnalysisResponse)
-async def analyze_content(content: DocumentContent):
+@limiter.limit("10/minute")
+async def analyze_content(request: Request, content: DocumentContent):
     """
     Analisa o conteúdo do documento e retorna score de conformidade ABNT.
 
@@ -322,7 +327,10 @@ async def analyze_content(content: DocumentContent):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
+        import traceback
+        print(f"[ERROR] analyze-content: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Erro interno na análise do documento")
 
 
 # ============================================
@@ -330,7 +338,8 @@ async def analyze_content(content: DocumentContent):
 # ============================================
 
 @router.post("/format-content", response_model=FormatResponse)
-async def format_content(content: DocumentContent):
+@limiter.limit("10/minute")
+async def format_content(request: Request, content: DocumentContent):
     """
     Gera instruções de formatação para o documento baseadas na norma solicitada.
     Suporta: ABNT, APA, IEEE, Vancouver.
@@ -434,7 +443,10 @@ async def format_content(content: DocumentContent):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na formatação: {str(e)}")
+        import traceback
+        print(f"[ERROR] format-content: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Erro interno na formatação do documento")
 
 
 # ============================================
@@ -442,7 +454,8 @@ async def format_content(content: DocumentContent):
 # ============================================
 
 @router.post("/write-stream")
-async def write_stream(write_request: WriteRequest):
+@limiter.limit("10/minute")
+async def write_stream(request: Request, write_request: WriteRequest):
     """
     Gera texto acadêmico via streaming (Server-Sent Events).
 
@@ -485,8 +498,9 @@ Formato: {write_request.format_type.value}
             })
 
         except Exception as e:
+            print(f"[ERROR] write-stream: {e}")
             yield json.dumps({
-                "error": str(e),
+                "error": "Erro na geração de texto",
                 "is_final": True
             })
 
@@ -498,22 +512,23 @@ Formato: {write_request.format_type.value}
 # ============================================
 
 @router.post("/write", response_model=WriteResponse)
-async def write_text(request: WriteRequest):
+@limiter.limit("10/minute")
+async def write_text(request: Request, write_request: WriteRequest):
     """
     Gera texto acadêmico (versão não streaming).
     """
     try:
         # Preparar contexto do documento
-        context = request.context[:1000] if request.context else ""
+        context = write_request.context[:1000] if write_request.context else ""
 
         # Chamar função de geração (síncrona)
         text = generate_academic_text(
             document_context=context,
-            instruction=request.instruction,
-            section_type=request.section_type.value,
-            format_type=request.format_type.value,
-            knowledge_area=request.knowledge_area or 'geral',
-            work_type=request.work_type or 'acadêmico'
+            instruction=write_request.instruction,
+            section_type=write_request.section_type.value,
+            format_type=write_request.format_type.value,
+            knowledge_area=write_request.knowledge_area or 'geral',
+            work_type=write_request.work_type or 'acadêmico'
         )
         word_count = len(text.split())
 
@@ -529,7 +544,10 @@ async def write_text(request: WriteRequest):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na geração: {str(e)}")
+        import traceback
+        print(f"[ERROR] write: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Erro interno na geração de texto")
 
 
 # ============================================
@@ -555,7 +573,8 @@ def detect_write_intent(message: str) -> tuple[bool, str, str]:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(chat_request: ChatRequest):
+@limiter.limit("20/minute")
+async def chat(request: Request, chat_request: ChatRequest):
     """
     Chat contextualizado com o documento.
     Detecta automaticamente quando o usuário quer gerar texto.
@@ -644,7 +663,8 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
             # Se a revisão corrigiu o texto, usar a versão corrigida
             final_text = review["corrected_text"]
             review_score = review["score"]
-            was_reviewed = review_score >= 0  # -1 = erro na revisão
+            was_reviewed = review.get("was_corrected", False)
+            detailed_review_data = review.get("detailed_review")
 
             word_count = len(final_text.split())
 
@@ -680,7 +700,8 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 context_info=context_info,
                 generated_content=final_text,
                 was_reviewed=was_reviewed,
-                review_score=review_score if was_reviewed else None
+                review_score=review_score if was_reviewed else None,
+                detailed_review=detailed_review_data
             )
 
         else:
@@ -740,9 +761,9 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 
     except Exception as e:
         import traceback
-        print(f"[ERROR] Chat endpoint error:")
+        print(f"[ERROR] chat: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Erro no chat: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erro interno no chat")
 
 
 # ============================================
@@ -750,7 +771,8 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 # ============================================
 
 @router.post("/improve", response_model=ImproveResponse)
-async def improve_text(request: ImproveRequest):
+@limiter.limit("15/minute")
+async def improve_text(request: Request, improve_request: ImproveRequest):
     """
     Melhora o texto selecionado pelo usuário.
 
@@ -761,17 +783,17 @@ async def improve_text(request: ImproveRequest):
     try:
         # Instrução para melhorar o texto
         instruction = f"""Melhore este texto mantendo o significado original:
-Tipo de melhoria: {request.improvement_type}
+Tipo de melhoria: {improve_request.improvement_type}
 
 Texto original:
-{request.text}
+{improve_request.text}
 
 Aprimore: clareza, objetividade, formalidade acadêmica, coesão e correção gramatical.
 Retorne apenas o texto melhorado, sem explicações."""
 
         # Chamar função de geração (síncrona)
         improved = generate_academic_text(
-            document_context=request.text,
+            document_context=improve_request.text,
             instruction=instruction,
             section_type="geral"
         )
@@ -779,12 +801,15 @@ Retorne apenas o texto melhorado, sem explicações."""
         return ImproveResponse(
             improved_text=improved.strip(),
             changes_summary="Texto revisado e aprimorado para maior clareza e formalidade acadêmica",
-            original_word_count=len(request.text.split()),
+            original_word_count=len(improve_request.text.split()),
             improved_word_count=len(improved.split())
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na melhoria: {str(e)}")
+        import traceback
+        print(f"[ERROR] improve: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Erro interno na melhoria do texto")
 
 
 # ============================================
@@ -805,19 +830,77 @@ async def health_check():
 # IMAGE PROXY (para evitar CORS)
 # ============================================
 
+# Domínios permitidos para o image proxy (previne SSRF)
+ALLOWED_IMAGE_DOMAINS = [
+    "source.unsplash.com",
+    "images.unsplash.com",
+    "plus.unsplash.com",
+    "upload.wikimedia.org",
+    "commons.wikimedia.org",
+    "i.imgur.com",
+    "pixabay.com",
+    "cdn.pixabay.com",
+    "pexels.com",
+    "images.pexels.com",
+]
+
+# Tamanho máximo de imagem: 10MB
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+
 @router.get("/image-proxy")
-async def image_proxy(url: str):
+@limiter.limit("30/minute")
+async def image_proxy(request: Request, url: str):
     """
     Proxy para buscar imagens externas e retornar em base64.
     Necessário para evitar problemas de CORS no Office Add-in.
+    Apenas domínios na allowlist são permitidos.
     """
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        from urllib.parse import urlparse
+        import ipaddress
+
+        parsed = urlparse(url)
+
+        # Validar protocolo (apenas HTTPS)
+        if parsed.scheme not in ("https", "http"):
+            raise HTTPException(status_code=400, detail="Apenas URLs HTTP/HTTPS são permitidas")
+
+        hostname = parsed.hostname or ""
+
+        # Bloquear IPs privados/internos (anti-SSRF)
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+                raise HTTPException(status_code=403, detail="Acesso a IPs internos não permitido")
+        except ValueError:
+            pass  # hostname não é IP, continuar com validação de domínio
+
+        # Verificar se o domínio está na allowlist
+        domain_allowed = any(
+            hostname == domain or hostname.endswith(f".{domain}")
+            for domain in ALLOWED_IMAGE_DOMAINS
+        )
+        if not domain_allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Domínio não permitido. Domínios aceitos: {', '.join(ALLOWED_IMAGE_DOMAINS[:5])}"
+            )
+
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, max_redirects=3) as client:
             response = await client.get(url)
             response.raise_for_status()
 
-            content_type = response.headers.get('content-type', 'image/jpeg')
+            # Validar content-type
+            content_type = response.headers.get('content-type', '')
+            if not content_type.startswith('image/'):
+                raise HTTPException(status_code=400, detail="URL não retornou uma imagem válida")
+
+            # Validar tamanho
             image_data = response.content
+            if len(image_data) > MAX_IMAGE_SIZE:
+                raise HTTPException(status_code=413, detail="Imagem excede o limite de 10MB")
+
             base64_data = base64.b64encode(image_data).decode('utf-8')
 
             return {
@@ -825,12 +908,14 @@ async def image_proxy(url: str):
                 "base64": base64_data,
                 "content_type": content_type
             }
+    except HTTPException:
+        raise
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Timeout ao buscar imagem")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail="Erro ao buscar imagem")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro no proxy de imagem: {str(e)}")
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=502, detail="Erro ao buscar imagem do servidor externo")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Erro interno no proxy de imagem")
 
 
 # ============================================
@@ -838,7 +923,8 @@ async def image_proxy(url: str):
 # ============================================
 
 @router.post("/generate-chart", response_model=ChartResponse)
-async def generate_chart_endpoint(request: ChartRequest):
+@limiter.limit("15/minute")
+async def generate_chart_endpoint(request: Request, chart_request: ChartRequest):
     """
     Gera um gráfico e retorna como imagem base64.
 
@@ -852,40 +938,40 @@ async def generate_chart_endpoint(request: ChartRequest):
     """
     try:
         # Validar dados
-        if len(request.labels) != len(request.values):
+        if len(chart_request.labels) != len(chart_request.values):
             raise HTTPException(
                 status_code=400,
                 detail="Número de labels deve ser igual ao número de valores"
             )
 
-        if len(request.labels) < 2:
+        if len(chart_request.labels) < 2:
             raise HTTPException(
                 status_code=400,
                 detail="Necessário pelo menos 2 pontos de dados"
             )
 
         # Verificar se é multi-série
-        if request.series and len(request.series) > 0:
+        if chart_request.series and len(chart_request.series) > 0:
             # Gráfico multi-série
-            series_data = [{"name": s.name, "values": s.values} for s in request.series]
+            series_data = [{"name": s.name, "values": s.values} for s in chart_request.series]
             base64_image = generate_multi_series_chart(
-                chart_type=request.chart_type.value,
-                labels=request.labels,
+                chart_type=chart_request.chart_type.value,
+                labels=chart_request.labels,
                 series=series_data,
-                title=request.title,
-                x_label=request.x_label,
-                y_label=request.y_label
+                title=chart_request.title,
+                x_label=chart_request.x_label,
+                y_label=chart_request.y_label
             )
         else:
             # Gráfico simples
             base64_image = generate_chart(
-                chart_type=request.chart_type.value,
-                labels=request.labels,
-                values=request.values,
-                title=request.title,
-                x_label=request.x_label,
-                y_label=request.y_label,
-                colors=request.colors
+                chart_type=chart_request.chart_type.value,
+                labels=chart_request.labels,
+                values=chart_request.values,
+                title=chart_request.title,
+                x_label=chart_request.x_label,
+                y_label=chart_request.y_label,
+                colors=chart_request.colors
             )
 
         return ChartResponse(
@@ -896,18 +982,22 @@ async def generate_chart_endpoint(request: ChartRequest):
     except ValueError as e:
         return ChartResponse(
             success=False,
-            error=str(e)
+            error="Dados inválidos para geração do gráfico"
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar gráfico: {str(e)}")
+        import traceback
+        print(f"[ERROR] generate-chart: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Erro interno na geração do gráfico")
 @router.post("/review-selection", response_model=InlineReviewResponse)
-async def review_selection_endpoint(request: InlineReviewRequest):
+@limiter.limit("15/minute")
+async def review_selection_endpoint(request: Request, review_request: InlineReviewRequest):
     """
     Revisa um trecho de texto selecionado (gramática, estilo, clareza).
     """
     result = review_selection(
-        text=request.selected_text,
-        instruction=request.instruction,
-        format_type=request.format_type.value
+        text=review_request.selected_text,
+        instruction=review_request.instruction,
+        format_type=review_request.format_type.value
     )
     return InlineReviewResponse(**result)

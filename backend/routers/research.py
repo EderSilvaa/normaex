@@ -23,7 +23,8 @@ async def generate_structure_endpoint(request: StructureRequest):
             message="Estrutura gerada com sucesso baseada em modelos da área."
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar estrutura: {str(e)}")
+        print(f"[ERROR] structure: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao gerar estrutura")
 
 @router.post("/search", response_model=SearchResponse)
 async def search_academic_works(request: SearchRequest):
@@ -61,4 +62,5 @@ async def search_academic_works(request: SearchRequest):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na busca: {str(e)}")
+        print(f"[ERROR] search: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno na busca acadêmica")

@@ -3,9 +3,21 @@ Models Pydantic para o Office Add-in
 Esses models definem a estrutura de dados trocada entre o Add-in e o Backend
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from enum import Enum
+
+# Limites globais de segurança
+MAX_TEXT_LENGTH = 200_000       # ~200k chars para documentos completos
+MAX_MESSAGE_LENGTH = 10_000    # mensagens do chat
+MAX_INSTRUCTION_LENGTH = 5_000 # instruções de escrita
+MAX_CONTEXT_LENGTH = 100_000   # contexto de documento
+MAX_SELECTION_LENGTH = 50_000  # texto selecionado
+MAX_HISTORY_SIZE = 50          # mensagens no histórico
+MAX_EVENTS_SIZE = 20           # eventos recentes
+MAX_PARAGRAPHS = 5_000         # parágrafos por documento
+MAX_CHART_ITEMS = 100          # itens em gráficos
+MAX_REFERENCES = 200           # referências salvas
 
 
 # ============================================
@@ -73,10 +85,10 @@ class PageSetup(BaseModel):
 
 class DocumentContent(BaseModel):
     """Conteúdo completo do documento para análise"""
-    paragraphs: List[ParagraphData] = Field(..., description="Lista de parágrafos do documento")
+    paragraphs: List[ParagraphData] = Field(..., max_length=MAX_PARAGRAPHS, description="Lista de parágrafos do documento")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Metadados do documento")
     format_type: Optional[FormatType] = FormatType.ABNT
-    full_text: Optional[str] = Field(None, description="Texto completo concatenado")
+    full_text: Optional[str] = Field(None, max_length=MAX_TEXT_LENGTH, description="Texto completo concatenado")
     page_setup: Optional[PageSetup] = Field(None, description="Configurações de página (margens, tamanho)")
 
 
@@ -135,14 +147,14 @@ class FormatResponse(BaseModel):
 
 class WriteRequest(BaseModel):
     """Solicitação de geração de texto com IA"""
-    instruction: str = Field(..., description="Instrução do usuário (ex: 'escreva uma introdução sobre IA')")
+    instruction: str = Field(..., max_length=MAX_INSTRUCTION_LENGTH, description="Instrução do usuário (ex: 'escreva uma introdução sobre IA')")
     section_type: SectionType = Field(default=SectionType.GERAL, description="Tipo de seção")
-    context: Optional[str] = Field(None, description="Contexto do documento atual")
+    context: Optional[str] = Field(None, max_length=MAX_CONTEXT_LENGTH, description="Contexto do documento atual")
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
-    max_words: Optional[int] = Field(None, description="Limite de palavras")
-    tone: Optional[str] = Field("academico", description="Tom do texto: academico, formal, tecnico")
-    work_type: Optional[str] = Field(None, description="Tipo de trabalho: tcc, artigo...")
-    knowledge_area: Optional[str] = Field(None, description="Área: psicologia, direito...")
+    max_words: Optional[int] = Field(None, ge=10, le=50000, description="Limite de palavras")
+    tone: Optional[str] = Field("academico", max_length=50, description="Tom do texto: academico, formal, tecnico")
+    work_type: Optional[str] = Field(None, max_length=100, description="Tipo de trabalho: tcc, artigo...")
+    knowledge_area: Optional[str] = Field(None, max_length=100, description="Área: psicologia, direito...")
 
 
 class WriteChunk(BaseModel):
@@ -165,24 +177,24 @@ class WriteResponse(BaseModel):
 
 class ProjectMemory(BaseModel):
     """Memória persistente do projeto do usuário"""
-    structure: Optional[str] = Field(None, description="Estrutura gerada para o trabalho")
-    saved_references: List[Dict[str, Any]] = Field(default_factory=list, description="Referências salvas pelo usuário")
+    structure: Optional[str] = Field(None, max_length=MAX_SELECTION_LENGTH, description="Estrutura gerada para o trabalho")
+    saved_references: List[Dict[str, Any]] = Field(default_factory=list, max_length=MAX_REFERENCES, description="Referências salvas pelo usuário")
 
 
 class ChatRequest(BaseModel):
     """Solicitação de chat com contexto do documento"""
-    message: str = Field(..., description="Mensagem do usuário")
-    context: Optional[str] = Field(None, description="Contexto do documento (texto selecionado ou documento completo)")
-    history: Optional[List[Dict[str, str]]] = Field(default_factory=list, description="Histórico de mensagens")
-    
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LENGTH, description="Mensagem do usuário")
+    context: Optional[str] = Field(None, max_length=MAX_CONTEXT_LENGTH, description="Contexto do documento (texto selecionado ou documento completo)")
+    history: Optional[List[Dict[str, str]]] = Field(default_factory=list, max_length=MAX_HISTORY_SIZE, description="Histórico de mensagens")
+
     # Novos campos de memória
     project_memory: Optional[ProjectMemory] = Field(default_factory=ProjectMemory, description="Memória persistente do projeto")
-    events: Optional[List[str]] = Field(default_factory=list, description="Lista de eventos recentes do sistema")
+    events: Optional[List[str]] = Field(default_factory=list, max_length=MAX_EVENTS_SIZE, description="Lista de eventos recentes do sistema")
 
-    project_id: Optional[str] = Field(None, description="ID do projeto para incluir contexto de PDFs")
+    project_id: Optional[str] = Field(None, max_length=100, description="ID do projeto para incluir contexto de PDFs")
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
-    work_type: Optional[str] = Field(None, description="Tipo de trabalho: tcc, artigo...")
-    knowledge_area: Optional[str] = Field(None, description="Área: psicologia, direito...")
+    work_type: Optional[str] = Field(None, max_length=100, description="Tipo de trabalho: tcc, artigo...")
+    knowledge_area: Optional[str] = Field(None, max_length=100, description="Área: psicologia, direito...")
 
 
 class ContextInfo(BaseModel):
@@ -202,6 +214,20 @@ class ProactiveSuggestion(BaseModel):
     section_type: str
 
 
+class RubricCriterion(BaseModel):
+    """Critério de avaliação detalhada"""
+    name: str = Field(..., description="Nome do critério (Estrutura, Clareza, etc)")
+    score: float = Field(..., description="Nota do critério (0-10)")
+    feedback: str = Field(..., description="Feedback específico para este critério")
+
+
+class DetailedReview(BaseModel):
+    """Revisão detalhada com rubrica"""
+    total_score: float = Field(..., description="Nota geral (0-10)")
+    criteria: List[RubricCriterion] = Field(..., description="Lista de critérios avaliados")
+    summary: str = Field(..., description="Resumo geral da avaliação")
+
+
 class ChatResponse(BaseModel):
     """Resposta do chat"""
     message: str = Field(..., description="Resposta da IA")
@@ -209,7 +235,8 @@ class ChatResponse(BaseModel):
     context_info: Optional[ContextInfo] = Field(None, description="Info sobre contexto de PDFs usado")
     generated_content: Optional[str] = Field(None, description="Conteúdo limpo gerado para inserção")
     was_reviewed: Optional[bool] = Field(None, description="Se o texto passou por auto-revisão")
-    review_score: Optional[float] = Field(None, description="Score da auto-revisão (0-10)")
+    review_score: Optional[float] = Field(None, description="Score da auto-revisão (0-10) - LEGADO")
+    detailed_review: Optional[DetailedReview] = Field(None, description="Avaliação detalhada com rubrica")
     proactive_suggestions: Optional[List[ProactiveSuggestion]] = Field(None, description="Sugestões de melhoria proativa")
 
 
@@ -219,8 +246,8 @@ class ChatResponse(BaseModel):
 
 class ImproveRequest(BaseModel):
     """Solicitação de melhoria de texto"""
-    text: str = Field(..., description="Texto a ser melhorado")
-    improvement_type: Optional[str] = Field("geral", description="Tipo: geral, clareza, formalidade, concisao")
+    text: str = Field(..., min_length=1, max_length=MAX_SELECTION_LENGTH, description="Texto a ser melhorado")
+    improvement_type: Optional[str] = Field("geral", max_length=50, description="Tipo: geral, clareza, formalidade, concisao")
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
 
 
@@ -238,7 +265,7 @@ class ImproveResponse(BaseModel):
 
 class ValidationMessage(BaseModel):
     """Mensagem enviada via WebSocket para validação em tempo real"""
-    content: str = Field(..., description="Conteúdo a ser validado")
+    content: str = Field(..., max_length=MAX_TEXT_LENGTH, description="Conteúdo a ser validado")
     format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação")
 
 
@@ -271,13 +298,13 @@ class ChartDataSeries(BaseModel):
 class ChartRequest(BaseModel):
     """Solicitação de geração de gráfico"""
     chart_type: ChartType = Field(..., description="Tipo de gráfico")
-    labels: List[str] = Field(..., description="Rótulos dos dados (eixo X ou categorias)")
-    values: List[float] = Field(..., description="Valores numéricos")
-    title: Optional[str] = Field(None, description="Título do gráfico")
-    x_label: Optional[str] = Field(None, description="Rótulo do eixo X")
-    y_label: Optional[str] = Field(None, description="Rótulo do eixo Y")
-    colors: Optional[List[str]] = Field(None, description="Cores personalizadas (hex)")
-    series: Optional[List[ChartDataSeries]] = Field(None, description="Múltiplas séries (para gráficos comparativos)")
+    labels: List[str] = Field(..., max_length=MAX_CHART_ITEMS, description="Rótulos dos dados (eixo X ou categorias)")
+    values: List[float] = Field(..., max_length=MAX_CHART_ITEMS, description="Valores numéricos")
+    title: Optional[str] = Field(None, max_length=200, description="Título do gráfico")
+    x_label: Optional[str] = Field(None, max_length=100, description="Rótulo do eixo X")
+    y_label: Optional[str] = Field(None, max_length=100, description="Rótulo do eixo Y")
+    colors: Optional[List[str]] = Field(None, max_length=MAX_CHART_ITEMS, description="Cores personalizadas (hex)")
+    series: Optional[List[ChartDataSeries]] = Field(None, max_length=20, description="Múltiplas séries (para gráficos comparativos)")
 
 
 class ChartResponse(BaseModel):
@@ -292,8 +319,8 @@ class ChartResponse(BaseModel):
 # ============================================
 
 class InlineReviewRequest(BaseModel):
-    selected_text: str = Field(..., description="Texto selecionado para revisão")
-    instruction: Optional[str] = Field(None, description="Instrução adicional do usuário")
+    selected_text: str = Field(..., min_length=1, max_length=MAX_SELECTION_LENGTH, description="Texto selecionado para revisão")
+    instruction: Optional[str] = Field(None, max_length=MAX_INSTRUCTION_LENGTH, description="Instrução adicional do usuário")
     format_type: FormatType = Field(FormatType.ABNT, description="Norma de formatação")
 
 

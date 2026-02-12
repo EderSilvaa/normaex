@@ -7,10 +7,11 @@ import google.generativeai as genai
 import os
 import json
 from services.ai import get_model
+from services.sanitizer import sanitize_for_prompt
 
 def review_selection(
-    text: str, 
-    instruction: str = "", 
+    text: str,
+    instruction: str = "",
     format_type: str = "abnt"
 ) -> dict:
     """
@@ -19,15 +20,17 @@ def review_selection(
     """
     try:
         model = get_model()
-        
+        safe_text = sanitize_for_prompt(text, max_length=10000)
+        safe_instruction = sanitize_for_prompt(instruction, max_length=1000)
+
         prompt = f"""Atue como um editor acadêmico sênior (Norma {format_type.upper()}).
 Sua tarefa é melhorar o seguinte trecho de texto selecionado pelo usuário.
 Foque em: Clareza, Coesão, Gramática e Tom Acadêmico.
 
 TRECHO ORIGINAL:
-"{text}"
+"{safe_text}"
 
-INSTRUÇÃO EXTRA DO USUÁRIO: "{instruction}" (se houver)
+INSTRUÇÃO EXTRA DO USUÁRIO: "{safe_instruction}" (se houver)
 
 Retorne APENAS um JSON com o seguinte formato:
 {{

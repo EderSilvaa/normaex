@@ -36,6 +36,18 @@ interface ContextInfo {
   total_words: number;
 }
 
+interface RubricCriterion {
+  name: string;
+  score: number;
+  feedback: string;
+}
+
+interface DetailedReview {
+  total_score: number;
+  criteria: RubricCriterion[];
+  summary: string;
+}
+
 interface ChatResponseData {
   message: string;
   suggestions?: string[];
@@ -43,6 +55,8 @@ interface ChatResponseData {
   generated_content?: string | null;
   was_reviewed?: boolean | null;
   review_score?: number | null;
+
+  detailed_review?: DetailedReview | null;
   proactive_suggestions?: ProactiveSuggestion[];
 }
 
@@ -95,7 +109,9 @@ interface Message {
   proactiveSuggestions?: ProactiveSuggestion[];
   analysisResult?: AnalysisResultData;
   formatResult?: FormatResultData;
+
   reviewResult?: ReviewResultData;
+  detailedReview?: DetailedReview | null;
 }
 
 interface SearchResult {
@@ -691,6 +707,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         generatedContent: response.generated_content,
         wasReviewed: response.was_reviewed,
         reviewScore: response.review_score,
+
+        detailedReview: response.detailed_review,
         proactiveSuggestions: response.proactive_suggestions,
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -987,6 +1005,63 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 )
               }
 
+              {/* Rubrica Detalhada */}
+              {message.detailedReview && (
+                <div style={{
+                  maxWidth: '92%',
+                  background: '#111',
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: '10px',
+                  marginTop: '8px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    padding: '10px 14px',
+                    background: '#1a1a1a',
+                    borderBottom: `1px solid ${theme.colors.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                  }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span>📊</span>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>Avaliação de Qualidade</span>
+                    </div>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: message.detailedReview.total_score >= 7 ? '#4ade80' : '#facc15'
+                    }}>
+                      Nota {message.detailedReview.total_score.toFixed(1)}
+                    </span>
+                  </div>
+
+                  <div style={{ padding: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                      {message.detailedReview.criteria.map((c, i) => (
+                        <div key={i} style={{ background: '#222', padding: '8px', borderRadius: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>{c.name}</span>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: c.score >= 7 ? '#4ade80' : '#f87171' }}>
+                              {c.score}
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', height: '4px', background: '#333', borderRadius: '2px' }}>
+                            <div style={{
+                              width: `${c.score * 10}%`,
+                              height: '100%',
+                              background: c.score >= 7 ? '#4ade80' : '#f87171',
+                              borderRadius: '2px'
+                            }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.5', fontStyle: 'italic', margin: 0 }}>
+                      "{message.detailedReview.summary}"
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Card de Análise */}
               {message.analysisResult && (
                 <div style={{
@@ -1163,719 +1238,607 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         )
       }
 
-      {/* Preview de imagem pendente */}
+      {/* Modal de Imagem Pendente */}
       {
         pendingImage && (
           <div
             style={{
-              padding: '10px',
-              background: '#1a1a1a',
-              borderRadius: '10px',
-              marginBottom: '10px',
-              border: '1px solid #333',
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.8)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
             }}
+            onClick={(e) => { if (e.target === e.currentTarget) handleCancelImage(); }}
           >
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
-              <img
-                src={pendingImage.preview}
-                alt="Preview"
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  objectFit: 'cover',
-                  borderRadius: '6px',
-                }}
-              />
-              <div style={{ flex: 1 }}>
-                <input
-                  type="text"
-                  placeholder="Descrição da figura (ex: Gráfico de vendas 2024)"
-                  value={imageCaption}
-                  onChange={(e) => setImageCaption(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid #333',
-                    background: '#0a0a0a',
-                    color: '#fff',
-                    fontSize: '11px',
-                    marginBottom: '6px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="Fonte (ex: Autor, 2024 ou 'própria')"
-                  value={imageSource}
-                  onChange={(e) => setImageSource(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid #333',
-                    background: '#0a0a0a',
-                    color: '#fff',
-                    fontSize: '11px',
-                    boxSizing: 'border-box',
-                  }}
-                />
+            <div style={{
+              background: '#0d0d0d',
+              borderRadius: '12px',
+              border: '1px solid #333',
+              width: '100%',
+              maxWidth: '400px',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #333',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#1a1a1a',
+                borderRadius: '12px 12px 0 0',
+              }}>
+                <span style={{ fontWeight: 600, color: '#fff', fontSize: '13px' }}>Inserir Imagem</span>
+                <button
+                  onClick={handleCancelImage}
+                  style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  ✕
+                </button>
               </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={handleCancelImage}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: 'transparent',
-                  color: '#888',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleInsertImage}
-                disabled={!imageCaption.trim() || sending}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: imageCaption.trim() && !sending ? '#Eebb4d' : '#333',
-                  color: imageCaption.trim() && !sending ? '#0a0a0a' : '#666',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: imageCaption.trim() && !sending ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {sending ? 'Inserindo...' : 'Inserir no Documento'}
-              </button>
+              <div style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                  <img
+                    src={pendingImage.preview}
+                    alt="Preview"
+                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #333' }}
+                  />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Descrição da figura *"
+                      value={imageCaption}
+                      onChange={(e) => setImageCaption(e.target.value)}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '6px',
+                        border: '1px solid #333', background: '#0a0a0a',
+                        color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                      }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Fonte (ex: Autor, 2024)"
+                      value={imageSource}
+                      onChange={(e) => setImageSource(e.target.value)}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '6px',
+                        border: '1px solid #333', background: '#0a0a0a',
+                        color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleCancelImage}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: '6px',
+                      border: '1px solid #333', background: 'transparent',
+                      color: '#888', fontSize: '12px', cursor: 'pointer',
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleInsertImage}
+                    disabled={!imageCaption.trim() || sending}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: '6px', border: 'none',
+                      background: imageCaption.trim() && !sending ? '#Eebb4d' : '#333',
+                      color: imageCaption.trim() && !sending ? '#0a0a0a' : '#666',
+                      fontSize: '12px', fontWeight: 600,
+                      cursor: imageCaption.trim() && !sending ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {sending ? 'Inserindo...' : 'Inserir no Documento'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )
       }
 
-      {/* Modal de busca de imagens */}
+      {/* Modal de Busca de Imagens */}
       {
         showImageSearch && (
           <div
             style={{
-              padding: '10px',
-              background: '#1a1a1a',
-              borderRadius: '10px',
-              marginBottom: '10px',
-              border: '1px solid #333',
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.8)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowImageSearch(false);
+                setSearchResults([]);
+                setSearchQuery('');
+              }
             }}
           >
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-              <input
-                type="text"
-                placeholder="Buscar imagens..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleImageSearch()}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: '#0a0a0a',
-                  color: '#fff',
-                  fontSize: '11px',
-                }}
-              />
-              <button
-                onClick={handleImageSearch}
-                disabled={searchLoading}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: '#Eebb4d',
-                  color: '#0a0a0a',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: searchLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {searchLoading ? '...' : 'Buscar'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowImageSearch(false);
-                  setSearchResults([]);
-                  setSearchQuery('');
-                }}
-                style={{
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: 'transparent',
-                  color: '#888',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {searchResults.length > 0 && (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '6px',
-                }}
-              >
-                {searchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    onClick={() => handleSelectSearchImage(result)}
+            <div style={{
+              background: '#0d0d0d',
+              borderRadius: '12px',
+              border: '1px solid #333',
+              width: '100%',
+              maxWidth: '400px',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #333',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#1a1a1a',
+                borderRadius: '12px 12px 0 0',
+              }}>
+                <span style={{ fontWeight: 600, color: '#fff', fontSize: '13px' }}>Banco de Imagens</span>
+                <button
+                  onClick={() => { setShowImageSearch(false); setSearchResults([]); setSearchQuery(''); }}
+                  style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ padding: '16px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    placeholder="Buscar imagens..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleImageSearch()}
                     style={{
-                      aspectRatio: '4/3',
-                      borderRadius: '6px',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                      border: '2px solid transparent',
-                      transition: 'border-color 0.2s',
+                      flex: 1, padding: '8px', borderRadius: '6px',
+                      border: '1px solid #333', background: '#0a0a0a',
+                      color: '#fff', fontSize: '11px',
                     }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#Eebb4d';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'transparent';
+                  />
+                  <button
+                    onClick={handleImageSearch}
+                    disabled={searchLoading}
+                    style={{
+                      padding: '8px 14px', borderRadius: '6px', border: 'none',
+                      background: '#Eebb4d', color: '#0a0a0a', fontSize: '11px',
+                      fontWeight: 600, cursor: searchLoading ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    <img
-                      src={result.thumbUrl}
-                      alt={result.description}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+                    {searchLoading ? '...' : 'Buscar'}
+                  </button>
+                </div>
 
-            <p style={{ fontSize: '9px', color: '#666', marginTop: '8px', textAlign: 'center' }}>
-              Imagens via Unsplash (uso gratuito)
-            </p>
+                {searchResults.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                    {searchResults.map((result) => (
+                      <div
+                        key={result.id}
+                        onClick={() => handleSelectSearchImage(result)}
+                        style={{
+                          aspectRatio: '4/3', borderRadius: '6px', overflow: 'hidden',
+                          cursor: 'pointer', border: '2px solid transparent', transition: 'border-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#Eebb4d'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+                      >
+                        <img src={result.thumbUrl} alt={result.description} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p style={{ fontSize: '9px', color: '#666', marginTop: '10px', textAlign: 'center' }}>
+                  Imagens via Unsplash (uso gratuito)
+                </p>
+              </div>
+            </div>
           </div>
         )
       }
 
-      {/* Chart Builder */}
+      {/* Modal de Criar Gráfico */}
       {
         showChartBuilder && (
           <div
             style={{
-              padding: '12px',
-              background: '#1a1a1a',
-              borderRadius: '10px',
-              marginBottom: '10px',
-              border: '1px solid #333',
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.8)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
             }}
+            onClick={(e) => { if (e.target === e.currentTarget) handleCancelChart(); }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#Eebb4d' }}>📊 Criar Gráfico</span>
-              <button
-                onClick={handleCancelChart}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  border: '1px solid #333',
-                  background: 'transparent',
-                  color: '#888',
-                  fontSize: '10px',
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Tipo de gráfico */}
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Tipo</label>
-              <select
-                value={chartConfig.type}
-                onChange={(e) => {
-                  setChartConfig({ ...chartConfig, type: e.target.value as ChartType });
-                  setChartPreview(null);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: '#0a0a0a',
-                  color: '#fff',
-                  fontSize: '11px',
-                }}
-              >
-                <option value="bar">Barras Verticais</option>
-                <option value="bar_horizontal">Barras Horizontais</option>
-                <option value="line">Linhas</option>
-                <option value="pie">Pizza</option>
-                <option value="area">Área</option>
-              </select>
-            </div>
-
-            {/* Título */}
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Título da Figura *</label>
-              <input
-                type="text"
-                placeholder="Ex: Evolução das vendas em 2024"
-                value={chartConfig.title}
-                onChange={(e) => setChartConfig({ ...chartConfig, title: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: '#0a0a0a',
-                  color: '#fff',
-                  fontSize: '11px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Labels e Values */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Categorias (separadas por vírgula)</label>
-                <input
-                  type="text"
-                  placeholder="Jan, Fev, Mar, Abr"
-                  value={chartConfig.labels}
-                  onChange={(e) => {
-                    setChartConfig({ ...chartConfig, labels: e.target.value });
-                    setChartPreview(null);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid #333',
-                    background: '#0a0a0a',
-                    color: '#fff',
-                    fontSize: '11px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Valores (separados por vírgula)</label>
-                <input
-                  type="text"
-                  placeholder="100, 150, 200, 180"
-                  value={chartConfig.values}
-                  onChange={(e) => {
-                    setChartConfig({ ...chartConfig, values: e.target.value });
-                    setChartPreview(null);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid #333',
-                    background: '#0a0a0a',
-                    color: '#fff',
-                    fontSize: '11px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Rótulos dos eixos */}
-            {chartConfig.type !== 'pie' && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Eixo X (opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="Meses"
-                    value={chartConfig.xLabel}
-                    onChange={(e) => setChartConfig({ ...chartConfig, xLabel: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px solid #333',
-                      background: '#0a0a0a',
-                      color: '#fff',
-                      fontSize: '11px',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Eixo Y (opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="Vendas (R$)"
-                    value={chartConfig.yLabel}
-                    onChange={(e) => setChartConfig({ ...chartConfig, yLabel: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      borderRadius: '6px',
-                      border: '1px solid #333',
-                      background: '#0a0a0a',
-                      color: '#fff',
-                      fontSize: '11px',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Fonte */}
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Fonte</label>
-              <input
-                type="text"
-                placeholder="Elaboração própria"
-                value={chartConfig.source}
-                onChange={(e) => setChartConfig({ ...chartConfig, source: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: '#0a0a0a',
-                  color: '#fff',
-                  fontSize: '11px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Erro */}
-            {chartError && (
+            <div style={{
+              background: '#0d0d0d',
+              borderRadius: '12px',
+              border: '1px solid #333',
+              width: '100%',
+              maxWidth: '400px',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
               <div style={{
-                marginBottom: '10px',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#ef4444',
-                fontSize: '11px',
+                padding: '12px 16px',
+                borderBottom: '1px solid #333',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#1a1a1a',
+                borderRadius: '12px 12px 0 0',
+                flexShrink: 0,
               }}>
-                ⚠️ {chartError}
+                <span style={{ fontWeight: 600, color: '#fff', fontSize: '13px' }}>Criar Gráfico</span>
+                <button
+                  onClick={handleCancelChart}
+                  style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  ✕
+                </button>
               </div>
-            )}
+              <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
+                {/* Tipo */}
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Tipo</label>
+                  <select
+                    value={chartConfig.type}
+                    onChange={(e) => { setChartConfig({ ...chartConfig, type: e.target.value as ChartType }); setChartPreview(null); }}
+                    style={{
+                      width: '100%', padding: '8px', borderRadius: '6px',
+                      border: '1px solid #333', background: '#0a0a0a',
+                      color: '#fff', fontSize: '11px',
+                    }}
+                  >
+                    <option value="bar">Barras Verticais</option>
+                    <option value="bar_horizontal">Barras Horizontais</option>
+                    <option value="line">Linhas</option>
+                    <option value="pie">Pizza</option>
+                    <option value="area">Área</option>
+                  </select>
+                </div>
 
-            {/* Preview */}
-            {chartPreview && (
-              <div style={{ marginBottom: '10px', textAlign: 'center' }}>
-                <img
-                  src={`data:image/png;base64,${chartPreview}`}
-                  alt="Preview do gráfico"
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '150px',
-                    borderRadius: '6px',
-                    border: '1px solid #333',
-                  }}
-                />
+                {/* Título */}
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Título da Figura *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Evolução das vendas em 2024"
+                    value={chartConfig.title}
+                    onChange={(e) => setChartConfig({ ...chartConfig, title: e.target.value })}
+                    style={{
+                      width: '100%', padding: '8px', borderRadius: '6px',
+                      border: '1px solid #333', background: '#0a0a0a',
+                      color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                {/* Labels e Values */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Categorias</label>
+                    <input
+                      type="text"
+                      placeholder="Jan, Fev, Mar"
+                      value={chartConfig.labels}
+                      onChange={(e) => { setChartConfig({ ...chartConfig, labels: e.target.value }); setChartPreview(null); }}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '6px',
+                        border: '1px solid #333', background: '#0a0a0a',
+                        color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Valores</label>
+                    <input
+                      type="text"
+                      placeholder="100, 150, 200"
+                      value={chartConfig.values}
+                      onChange={(e) => { setChartConfig({ ...chartConfig, values: e.target.value }); setChartPreview(null); }}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '6px',
+                        border: '1px solid #333', background: '#0a0a0a',
+                        color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Eixos */}
+                {chartConfig.type !== 'pie' && (
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Eixo X</label>
+                      <input
+                        type="text"
+                        placeholder="Meses"
+                        value={chartConfig.xLabel}
+                        onChange={(e) => setChartConfig({ ...chartConfig, xLabel: e.target.value })}
+                        style={{
+                          width: '100%', padding: '8px', borderRadius: '6px',
+                          border: '1px solid #333', background: '#0a0a0a',
+                          color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Eixo Y</label>
+                      <input
+                        type="text"
+                        placeholder="Vendas (R$)"
+                        value={chartConfig.yLabel}
+                        onChange={(e) => setChartConfig({ ...chartConfig, yLabel: e.target.value })}
+                        style={{
+                          width: '100%', padding: '8px', borderRadius: '6px',
+                          border: '1px solid #333', background: '#0a0a0a',
+                          color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Fonte */}
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '10px', color: '#888', display: 'block', marginBottom: '4px' }}>Fonte</label>
+                  <input
+                    type="text"
+                    placeholder="Elaboração própria"
+                    value={chartConfig.source}
+                    onChange={(e) => setChartConfig({ ...chartConfig, source: e.target.value })}
+                    style={{
+                      width: '100%', padding: '8px', borderRadius: '6px',
+                      border: '1px solid #333', background: '#0a0a0a',
+                      color: '#fff', fontSize: '11px', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                {/* Erro */}
+                {chartError && (
+                  <div style={{
+                    marginBottom: '10px', padding: '8px 12px', borderRadius: '6px',
+                    background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444', fontSize: '11px',
+                  }}>
+                    {chartError}
+                  </div>
+                )}
+
+                {/* Preview */}
+                {chartPreview && (
+                  <div style={{ marginBottom: '12px', textAlign: 'center' }}>
+                    <img
+                      src={`data:image/png;base64,${chartPreview}`}
+                      alt="Preview do gráfico"
+                      style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: '6px', border: '1px solid #333' }}
+                    />
+                  </div>
+                )}
+
+                {/* Botões */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleGenerateChartPreview}
+                    disabled={chartLoading || !chartConfig.labels.trim() || !chartConfig.values.trim()}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: '6px',
+                      border: '1px solid #333', background: 'transparent',
+                      color: chartConfig.labels.trim() && chartConfig.values.trim() ? '#fff' : '#666',
+                      fontSize: '12px',
+                      cursor: chartConfig.labels.trim() && chartConfig.values.trim() ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {chartLoading ? 'Gerando...' : 'Visualizar'}
+                  </button>
+                  <button
+                    onClick={handleInsertChart}
+                    disabled={!chartPreview || !chartConfig.title.trim() || sending}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: '6px', border: 'none',
+                      background: chartPreview && chartConfig.title.trim() && !sending ? '#Eebb4d' : '#333',
+                      color: chartPreview && chartConfig.title.trim() && !sending ? '#0a0a0a' : '#666',
+                      fontSize: '12px', fontWeight: 600,
+                      cursor: chartPreview && chartConfig.title.trim() && !sending ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {sending ? 'Inserindo...' : 'Inserir no Documento'}
+                  </button>
+                </div>
               </div>
-            )}
-
-            {/* Botões */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={handleGenerateChartPreview}
-                disabled={chartLoading || !chartConfig.labels.trim() || !chartConfig.values.trim()}
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  background: 'transparent',
-                  color: chartConfig.labels.trim() && chartConfig.values.trim() ? '#fff' : '#666',
-                  fontSize: '11px',
-                  cursor: chartConfig.labels.trim() && chartConfig.values.trim() ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {chartLoading ? 'Gerando...' : '👁️ Visualizar'}
-              </button>
-              <button
-                onClick={handleInsertChart}
-                disabled={!chartPreview || !chartConfig.title.trim() || sending}
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: chartPreview && chartConfig.title.trim() && !sending ? '#Eebb4d' : '#333',
-                  color: chartPreview && chartConfig.title.trim() && !sending ? '#0a0a0a' : '#666',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: chartPreview && chartConfig.title.trim() && !sending ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {sending ? 'Inserindo...' : '📄 Inserir no Documento'}
-              </button>
             </div>
           </div>
         )
       }
 
-      {/* Quick Actions Toolbar */}
-      <div style={{
-        display: 'flex',
-        gap: '4px',
-        flexWrap: 'wrap',
-        flexShrink: 0,
-      }}>
-        {onAnalyzeDocument && (
-          <button onClick={handleAnalyze} disabled={actionLoading || sending} title="Analisar documento"
-            style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              padding: '5px 10px', borderRadius: '16px',
-              border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
-              color: theme.colors.text.secondary, fontSize: '11px',
-              cursor: actionLoading || sending ? 'not-allowed' : 'pointer',
-              opacity: actionLoading || sending ? 0.5 : 1,
-              whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
-            }}>
-            <span style={{ fontSize: '12px' }}>📊</span><span>Analisar</span>
-          </button>
-        )}
-        {onFormatDocument && (
-          <button onClick={handleFormat} disabled={actionLoading || sending} title="Formatar documento"
-            style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              padding: '5px 10px', borderRadius: '16px',
-              border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
-              color: theme.colors.text.secondary, fontSize: '11px',
-              cursor: actionLoading || sending ? 'not-allowed' : 'pointer',
-              opacity: actionLoading || sending ? 0.5 : 1,
-              whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
-            }}>
-            <span style={{ fontSize: '12px' }}>🎨</span><span>Formatar</span>
-          </button>
-        )}
-        {onReviewSelection && (
-          <button onClick={handleReview} disabled={actionLoading || sending} title="Revisar seleção"
-            style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              padding: '5px 10px', borderRadius: '16px',
-              border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
-              color: theme.colors.text.secondary, fontSize: '11px',
-              cursor: actionLoading || sending ? 'not-allowed' : 'pointer',
-              opacity: actionLoading || sending ? 0.5 : 1,
-              whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
-            }}>
-            <span style={{ fontSize: '12px' }}>✏️</span><span>Revisar</span>
-          </button>
-        )}
-        <button onClick={() => setShowResearchModal(true)} title="Pesquisa acadêmica"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '5px 10px', borderRadius: '16px',
-            border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
-            color: theme.colors.text.secondary, fontSize: '11px',
-            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
-          }}>
-          <span style={{ fontSize: '12px' }}>🔍</span><span>Pesquisa</span>
-        </button>
-        <button onClick={() => setShowProjectSelector(true)} title="Projetos"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '5px 10px', borderRadius: '16px',
-            border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
-            color: theme.colors.text.secondary, fontSize: '11px',
-            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
-          }}>
-          <span style={{ fontSize: '12px' }}>📁</span><span>Projetos</span>
-        </button>
-      </div>
-
-      {/* Input com botão de anexar */}
+      {/* Input com botão + */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        {/* Botão de anexar imagem */}
+        {/* Botão + unificado */}
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setShowImageMenu(!showImageMenu)}
             style={{
-              padding: '10px',
-              borderRadius: '10px',
-              border: '1px solid #333',
-              background: showImageMenu ? '#Eebb4d' : 'transparent',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              border: `1px solid ${showImageMenu ? theme.colors.primary : '#333'}`,
+              background: showImageMenu ? theme.colors.primary : 'transparent',
               color: showImageMenu ? '#0a0a0a' : '#888',
-              fontSize: '14px',
+              fontSize: '18px',
               cursor: 'pointer',
               flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              transform: showImageMenu ? 'rotate(45deg)' : 'none',
             }}
-            title="Anexar imagem"
+            title="Ações"
           >
-            📎
+            +
           </button>
 
-          {/* Menu de opções de imagem */}
+          {/* Menu unificado */}
           {showImageMenu && (
             <div
               style={{
                 position: 'absolute',
                 bottom: '100%',
                 left: 0,
-                marginBottom: '4px',
+                marginBottom: '6px',
                 background: '#1a1a1a',
                 border: '1px solid #333',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 overflow: 'hidden',
-                minWidth: '140px',
+                minWidth: '180px',
                 zIndex: 10,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
               }}
             >
+              {/* Seção: Ferramentas */}
+              <div style={{ padding: '6px 12px 2px', fontSize: '9px', color: '#666', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Ferramentas
+              </div>
+              {onAnalyzeDocument && (
+                <button
+                  onClick={() => { handleAnalyze(); setShowImageMenu(false); }}
+                  disabled={actionLoading || sending}
+                  style={{
+                    width: '100%', padding: '9px 12px', border: 'none',
+                    background: 'transparent', color: actionLoading ? '#555' : '#fff',
+                    fontSize: '12px', textAlign: 'left', cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                  }}
+                  onMouseEnter={(e) => { if (!actionLoading) e.currentTarget.style.background = '#2a2a2a'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ fontSize: '14px' }}>📊</span> Analisar Documento
+                </button>
+              )}
+              {onFormatDocument && (
+                <button
+                  onClick={() => { handleFormat(); setShowImageMenu(false); }}
+                  disabled={actionLoading || sending}
+                  style={{
+                    width: '100%', padding: '9px 12px', border: 'none',
+                    background: 'transparent', color: actionLoading ? '#555' : '#fff',
+                    fontSize: '12px', textAlign: 'left', cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                  }}
+                  onMouseEnter={(e) => { if (!actionLoading) e.currentTarget.style.background = '#2a2a2a'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ fontSize: '14px' }}>🎨</span> Formatar Documento
+                </button>
+              )}
+              {onReviewSelection && (
+                <button
+                  onClick={() => { handleReview(); setShowImageMenu(false); }}
+                  disabled={actionLoading || sending}
+                  style={{
+                    width: '100%', padding: '9px 12px', border: 'none',
+                    background: 'transparent', color: actionLoading ? '#555' : '#fff',
+                    fontSize: '12px', textAlign: 'left', cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                  }}
+                  onMouseEnter={(e) => { if (!actionLoading) e.currentTarget.style.background = '#2a2a2a'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ fontSize: '14px' }}>✏️</span> Revisar Seleção
+                </button>
+              )}
+
+              {/* Separador */}
+              <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+
+              {/* Seção: Inserir */}
+              <div style={{ padding: '6px 12px 2px', fontSize: '9px', color: '#666', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Inserir
+              </div>
               <button
-                onClick={() => {
-                  fileInputRef.current?.click();
-                  setShowImageMenu(false);
-                }}
+                onClick={() => { fileInputRef.current?.click(); setShowImageMenu(false); }}
                 style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#fff',
-                  fontSize: '11px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
+                  width: '100%', padding: '9px 12px', border: 'none',
+                  background: 'transparent', color: '#fff', fontSize: '12px',
+                  textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#333';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#2a2a2a'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                💻 Meu Computador
+                <span style={{ fontSize: '14px' }}>🖼️</span> Imagem do Computador
               </button>
               <button
-                onClick={() => {
-                  setShowImageSearch(true);
-                  setShowImageMenu(false);
-                }}
+                onClick={() => { setShowImageSearch(true); setShowImageMenu(false); }}
                 style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#fff',
-                  fontSize: '11px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
+                  width: '100%', padding: '9px 12px', border: 'none',
+                  background: 'transparent', color: '#fff', fontSize: '12px',
+                  textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#333';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#2a2a2a'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                🔍 Banco de Imagens
+                <span style={{ fontSize: '14px' }}>🔍</span> Banco de Imagens
               </button>
               <button
-                onClick={() => {
-                  setShowChartBuilder(true);
-                  setShowImageMenu(false);
-                }}
+                onClick={() => { setShowChartBuilder(true); setShowImageMenu(false); }}
                 style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#fff',
-                  fontSize: '11px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  borderTop: '1px solid #333',
+                  width: '100%', padding: '9px 12px', border: 'none',
+                  background: 'transparent', color: '#fff', fontSize: '12px',
+                  textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#333';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#2a2a2a'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                📊 Criar Gráfico
+                <span style={{ fontSize: '14px' }}>📊</span> Criar Gráfico
+              </button>
+
+              {/* Separador */}
+              <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+
+              {/* Seção: Pesquisa */}
+              <button
+                onClick={() => { setShowResearchModal(true); setShowImageMenu(false); }}
+                style={{
+                  width: '100%', padding: '9px 12px', border: 'none',
+                  background: 'transparent', color: '#fff', fontSize: '12px',
+                  textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#2a2a2a'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ fontSize: '14px' }}>📚</span> Pesquisa Acadêmica
               </button>
               <button
-                onClick={() => {
-                  setShowResearchModal(true);
-                  setShowImageMenu(false);
-                }}
+                onClick={() => { setShowProjectSelector(true); setShowImageMenu(false); }}
                 style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#fff',
-                  fontSize: '11px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  borderTop: '1px solid #333',
+                  width: '100%', padding: '9px 12px', border: 'none',
+                  background: 'transparent', color: '#fff', fontSize: '12px',
+                  textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                  borderRadius: '0 0 10px 10px',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#333';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#2a2a2a'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                🔍 Pesquisa Acadêmica
-              </button>
-              <button
-                onClick={() => {
-                  setShowProjectSelector(true);
-                  setShowImageMenu(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#fff',
-                  fontSize: '11px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  borderTop: '1px solid #333',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#333';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                📚 Gerenciar Projetos
+                <span style={{ fontSize: '14px' }}>📁</span> Gerenciar Projetos
               </button>
             </div>
           )}

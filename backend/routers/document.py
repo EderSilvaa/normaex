@@ -115,13 +115,15 @@ async def upload_file(file: UploadFile = File(...)):
             file_location = docx_location
             file.filename = docx_filename
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error converting PDF: {str(e)}")
+            print(f"[ERROR] pdf-convert: {e}")
+            raise HTTPException(status_code=500, detail="Erro interno ao converter PDF")
 
     # Analisar documento (sem aplicar formatação)
     try:
         analysis = analyze_document(file_location)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error analyzing file: {str(e)}")
+        print(f"[ERROR] analyze-file: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao analisar arquivo")
 
     return {
         "filename": file.filename,
@@ -146,7 +148,8 @@ async def apply_formatting(request: ApplyRequest):
     try:
         _, changes = format_abnt(file_location, processed_location)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+        print(f"[ERROR] process-file: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar arquivo")
 
     return {
         "filename": request.filename,
@@ -193,7 +196,8 @@ async def get_document_html(filename: str):
         html_content = convert_to_html(file_path)
         return {"html": html_content}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao converter para HTML: {str(e)}")
+        print(f"[ERROR] html-convert: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao converter para HTML")
 
 
 
@@ -508,7 +512,8 @@ async def smart_edit(request: SmartEditRequest):
             }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao processar edição: {str(e)}")
+        print(f"[ERROR] edit: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar edição")
 
 
 @router.post("/improve-text")
@@ -672,7 +677,8 @@ async def improve_text(request: ImproveTextRequest):
         import traceback
         print(f"[ERROR] Erro ao melhorar texto:")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Erro ao melhorar texto: {str(e)}")
+        print(f"[ERROR] improve-text: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao melhorar texto")
 
 
 @router.get("/structure/{filename}")
@@ -795,7 +801,7 @@ async def get_document_preview(filename: str):
         print(f"Erro ao converter para PDF: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Erro ao gerar preview: {str(e)}"
+            detail="Erro interno ao gerar preview"
         )
 
 
@@ -920,7 +926,8 @@ async def get_complete_vision(filename: str):
         return complete_vision
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao extrair visão completa: {str(e)}")
+        print(f"[ERROR] full-view: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao extrair visão completa")
 
 
 @router.get("/analyze-structure/{filename}")
@@ -1000,7 +1007,8 @@ async def analyze_structure(filename: str):
     except Exception as e:
         import traceback
         print(f"Erro na análise estrutural: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Erro ao analisar estrutura: {str(e)}")
+        print(f"[ERROR] analyze-structure: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao analisar estrutura")
 
 
 @router.post("/smart-format")
@@ -1100,7 +1108,8 @@ async def smart_format(request: ApplyRequest):
     except Exception as e:
         import traceback
         print(f"Erro na formatação inteligente: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Erro ao aplicar formatação inteligente: {str(e)}")
+        print(f"[ERROR] smart-format: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao aplicar formatação inteligente")
 
 
 @router.get("/validate/{filename}")
@@ -1215,7 +1224,8 @@ async def validate_document(filename: str, compare_with: Optional[str] = None):
     except Exception as e:
         import traceback
         print(f"Erro na validação do documento: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Erro ao validar documento: {str(e)}")
+        print(f"[ERROR] validate: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao validar documento")
 
 
 @router.post("/intelligent-write")
@@ -1290,7 +1300,8 @@ async def intelligent_write(request: WriteRequest):
     except Exception as e:
         import traceback
         print(f"Erro na escrita inteligente: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar texto inteligente: {str(e)}")
+        print(f"[ERROR] smart-write: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao gerar texto inteligente")
 
 
 @router.post("/intelligent-write-stream")
