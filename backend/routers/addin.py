@@ -80,255 +80,231 @@ async def analyze_content(content: DocumentContent):
                 summary="Documento vazio - não foi possível analisar"
             )
 
+        # Determinar norma e regras
+        norm_key = content.format_type.value.lower() if content.format_type else "abnt"
+        
+        # Configuração de Regras por Norma
+        rules_map = {
+            "abnt": {
+                "name": "ABNT",
+                "fonts": ["times new roman", "arial"],
+                "sizes": {"normal": [11, 12], "quote": [10, 11], "min": 10, "max": 12.5},
+                "alignment": ["justified", "justify", "both"],
+                "spacing": [1.5],
+                "margins": {"top": 3.0, "left": 3.0, "bottom": 2.0, "right": 2.0},
+                "msg_spacing": "1.5",
+                "msg_align": "justificado"
+            },
+            "apa": {
+                "name": "APA",
+                "fonts": ["times new roman", "arial", "calibri", "georgia", "lucida sans unicode", "computer modern"],
+                "sizes": {"normal": [10, 11, 12], "quote": [10, 11, 12], "min": 10, "max": 12.5},
+                "alignment": ["left"], # Alinhamento à esquerda (não justificado)
+                "spacing": [2.0],
+                "margins": {"top": 2.54, "left": 2.54, "bottom": 2.54, "right": 2.54}, # 1 polegada
+                "msg_spacing": "duplo (2.0)",
+                "msg_align": "alinhado à esquerda"
+            },
+            "vancouver": {
+                "name": "Vancouver",
+                "fonts": ["times new roman", "arial", "calibri"], 
+                "sizes": {"normal": [11, 12], "quote": [10, 11], "min": 10, "max": 12.5},
+                "alignment": ["justified", "justify", "both"], # Comum, mas não obrigatório
+                "spacing": [1.5, 2.0], # Varia por journal
+                "margins": {"top": 2.5, "left": 2.5, "bottom": 2.5, "right": 2.5}, # Geralmente 1 polegada
+                "msg_spacing": "1.5 ou duplo",
+                "msg_align": "justificado"
+            },
+            "ieee": {
+                "name": "IEEE",
+                "fonts": ["times new roman", "arial"], 
+                "sizes": {"normal": [10, 11, 12], "quote": [9, 10], "min": 9, "max": 12.5},
+                "alignment": ["justified", "left"],
+                "spacing": [1.0, 1.15, 1.5], # Simples é comum em papers finais
+                "margins": {"top": 1.9, "left": 1.3, "bottom": 1.9, "right": 1.3},
+                "msg_spacing": "simples",
+                "msg_align": "justificado"
+            }
+        }
+        
+        rules = rules_map.get(norm_key, rules_map["abnt"])
+
         # Analisar documento
         issues = []
         score = 100
-
-        # Verificações básicas de conformidade ABNT
-        word_count = len(full_text.split())
-
+        
         # 1. Verificar tamanho mínimo
+        word_count = len(full_text.split())
         if word_count < 100:
             issues.append(Issue(
-                code="ABNT_001",
+                code="DOC_SIZE",
                 message="Documento muito curto para análise completa",
                 severity=IssueSeverity.WARNING,
                 suggestion="Adicione mais conteúdo para uma análise mais precisa"
             ))
             score -= 5
 
-        # 2. Verificar parágrafos (com filtros inteligentes)
+        # 2. Verificar parágrafos
         paragraphs = content.paragraphs
-
-        # Contadores para agrupar issues similares
         font_issues = {"wrong_font": [], "wrong_size": []}
         alignment_issues = []
         spacing_issues = []
 
-        # Tamanhos de fonte permitidos (12pt normal, 10pt para citações/notas, 14pt para títulos)
-        allowed_sizes = [10, 10.0, 11, 11.0, 12, 12.0, 14, 14.0, 16, 16.0, 18, 18.0]
-
         for i, para in enumerate(paragraphs):
-            # FILTRO 1: Ignorar parágrafos vazios ou só com espaços
+            # --- FILTROS (mesmos da original) ---
             text_content = para.text.strip() if para.text else ""
-            if len(text_content) < 3:  # Menos de 3 caracteres = ignorar
-                continue
-
-            # FILTRO 2: Ignorar linhas separadoras (---, ___, ===, ***, etc.)
+            if len(text_content) < 3: continue
+            
             clean_text = text_content.replace(" ", "").replace("\t", "").replace("\n", "")
-            # Detectar padrões de separadores (caracteres repetidos)
-            if re.match(r'^[-_=*~.•·]{2,}$', clean_text):
-                continue
-            # Detectar apenas pontuação isolada
-            if clean_text in ["", ".", ",", "-", "—", "–", ":", ";", "..."]:
-                continue
-
-            # FILTRO 3: Contar palavras reais no parágrafo (mínimo 3 caracteres por palavra)
+            if re.match(r'^[-_=*~.•·]{2,}$', clean_text): continue
+            if clean_text in ["", ".", ",", "-", "—", "–", ":", ";", "..."]: continue
+            
             words_in_para = len([w for w in text_content.split() if len(w) >= 3 and w.isalpha()])
-            if words_in_para < 2:  # Menos de 2 palavras reais = ignorar
-                continue
+            if words_in_para < 2: continue
 
-            # FILTRO 4: Identificar tipo de parágrafo pelo estilo
+            # --- IDENTIFICAÇÃO DE ESTILO ---
             style_lower = para.style.lower() if para.style else ""
             is_heading = "heading" in style_lower or "título" in style_lower
             is_title = "title" in style_lower
-            is_footnote = "footnote" in style_lower or "nota de rodapé" in style_lower or "nota" in style_lower
-            is_caption = "caption" in style_lower or "legenda" in style_lower
-            is_quote = "quote" in style_lower or "citação" in style_lower or "block" in style_lower
-
-            # FILTRO 5: Detectar notas de rodapé pelo conteúdo (começa com número/símbolo)
-            if re.match(r'^[\d¹²³⁴⁵⁶⁷⁸⁹⁰]+\s', text_content):
-                is_footnote = True
-
-            # FILTRO 6: Detectar citações longas (recuo + fonte menor geralmente)
-            if para.font_size and para.font_size <= 11 and para.first_line_indent and para.first_line_indent > 30:
+            is_footnote = "footnote" in style_lower or "nota" in style_lower and re.match(r'^[\d¹²³]+\s', text_content)
+            is_quote = "quote" in style_lower or "citação" in style_lower
+            
+            # Detecção heurística de citação
+            if para.font_size and para.font_size <= rules["sizes"]["quote"][-1] and para.first_line_indent and para.first_line_indent > 25:
                 is_quote = True
 
-            # Verificar fonte (apenas para texto normal, não títulos/notas)
+            # --- VALIDAÇÕES ---
+            
+            # Fonte
             if para.font_name and not is_heading and not is_title:
                 font_lower = para.font_name.lower()
-                if font_lower not in ["times new roman", "arial"]:
-                    font_issues["wrong_font"].append({
-                        "index": i,
-                        "font": para.font_name,
-                        "preview": text_content[:50]
-                    })
+                if font_lower not in rules["fonts"]:
+                    font_issues["wrong_font"].append({"index": i, "font": para.font_name})
 
-            # Verificar tamanho da fonte (com exceções inteligentes)
+            # Tamanho
             if para.font_size:
                 size = float(para.font_size)
+                skip_size_check = is_footnote or is_heading or is_title
+                
+                if is_quote:
+                    if size not in rules["sizes"]["quote"] and (size < rules["sizes"]["min"] or size > rules["sizes"]["max"]):
+                         font_issues["wrong_size"].append({"index": i, "size": size, "expected": str(rules["sizes"]["quote"])})
+                
+                elif not skip_size_check:
+                    if size < rules["sizes"]["min"] or size > rules["sizes"]["max"]:
+                        font_issues["wrong_size"].append({"index": i, "size": size, "expected": str(rules["sizes"]["normal"])})
 
-                # Pular verificação de tamanho para elementos especiais
-                skip_size_check = (
-                    is_footnote or is_caption or is_quote or  # Notas/citações podem ter 10pt
-                    is_heading or is_title  # Títulos podem ter tamanhos maiores
-                )
-
-                if not skip_size_check:
-                    # Para texto normal: só reportar tamanhos muito fora do padrão
-                    # Aceitar: 10pt (citação), 11pt, 12pt (normal)
-                    if size < 10 or size > 12.5:
-                        font_issues["wrong_size"].append({
-                            "index": i,
-                            "size": para.font_size,
-                            "expected": "12pt",
-                            "preview": text_content[:50]
-                        })
-
-            # Verificar alinhamento (apenas texto normal)
+            # Alinhamento
             if para.alignment and not is_heading and not is_title:
                 align = para.alignment.lower()
-                if align not in ["justified", "justify", "both"]:
-                    alignment_issues.append({
-                        "index": i,
-                        "alignment": para.alignment,
-                        "preview": text_content[:50]
-                    })
+                if align not in rules["alignment"]:
+                    alignment_issues.append({"index": i, "alignment": para.alignment})
 
-            # Verificar espaçamento (apenas texto normal)
-            if para.line_spacing and not is_footnote and not is_quote:
-                if para.line_spacing != 1.5 and para.line_spacing not in [1.0, 1.15, 2.0]:
-                    spacing_issues.append({
-                        "index": i,
-                        "spacing": para.line_spacing,
-                        "preview": text_content[:50]
-                    })
+            # Espaçamento
+            if para.line_spacing and not is_footnote and not is_quote and not is_heading:
+                # Tolerância pequena para float
+                is_valid_spacing = any(abs(para.line_spacing - valid) < 0.1 for valid in rules["spacing"])
+                if not is_valid_spacing:
+                    spacing_issues.append({"index": i, "spacing": para.line_spacing})
 
-        # Criar issues agrupadas (máximo 3 por tipo para não poluir)
+        # --- REPORTAR ISSUES ---
+        
+        # Fontes
         if font_issues["wrong_font"]:
-            unique_fonts = list(set([f["font"] for f in font_issues["wrong_font"]]))
+            unique = list(set([f["font"] for f in font_issues["wrong_font"]]))
             count = len(font_issues["wrong_font"])
             issues.append(Issue(
-                code="ABNT_002",
-                message=f"Fonte não recomendada em {count} parágrafo(s): {', '.join(unique_fonts[:3])}",
+                code="FONT_STYLE",
+                message=f"Fonte não recomendada para {rules['name']} em {count} parágrafo(s): {', '.join(unique[:3])}",
                 severity=IssueSeverity.WARNING,
                 paragraph_index=font_issues["wrong_font"][0]["index"],
-                suggestion="Use Times New Roman ou Arial conforme ABNT"
+                suggestion=f"Use uma das fontes permitidas: {', '.join(rules['fonts'][:2]).title()}"
             ))
-            score -= min(count * 2, 10)  # Máximo -10 pontos
+            score -= min(count * 2, 10)
 
+        # Tamanho
         if font_issues["wrong_size"]:
-            sizes = list(set([str(f["size"]) + "pt" for f in font_issues["wrong_size"]]))
             count = len(font_issues["wrong_size"])
             issues.append(Issue(
-                code="ABNT_003",
-                message=f"Tamanho de fonte incorreto em {count} parágrafo(s): {', '.join(sizes[:3])}",
+                code="FONT_SIZE",
+                message=f"Tamanho de fonte incorreto para norma {rules['name']} em {count} parágrafo(s)",
                 severity=IssueSeverity.INFO,
                 paragraph_index=font_issues["wrong_size"][0]["index"],
-                suggestion="Use 12pt para texto normal, 10pt para citações longas"
-            ))
-            score -= min(count, 5)  # Máximo -5 pontos
-
-        if alignment_issues:
-            count = len(alignment_issues)
-            if count >= 1:  # Reportar qualquer parágrafo não justificado
-                issues.append(Issue(
-                    code="ABNT_004",
-                    message=f"{count} parágrafo(s) não está(ão) justificado(s)",
-                    severity=IssueSeverity.INFO,
-                    paragraph_index=alignment_issues[0]["index"],
-                    suggestion="Aplique alinhamento justificado ao corpo do texto"
-                ))
-                score -= min(count, 5)
-
-        if spacing_issues:
-            count = len(spacing_issues)
-            spacings = list(set([str(s["spacing"]) for s in spacing_issues]))
-            issues.append(Issue(
-                code="ABNT_005",
-                message=f"Espaçamento de {', '.join(spacings[:2])} em {count} parágrafo(s)",
-                severity=IssueSeverity.INFO,
-                paragraph_index=spacing_issues[0]["index"],
-                suggestion="Use espaçamento de 1,5 entre linhas para texto normal"
+                suggestion=f"Verifique tamanhos (Texto: {rules['sizes']['normal']}, Citação: {rules['sizes']['quote']})"
             ))
             score -= min(count, 5)
 
-        # 3. Verificar margens do documento (ABNT: 3cm sup/esq, 2cm inf/dir)
+        # Alinhamento
+        if alignment_issues:
+            count = len(alignment_issues)
+            issues.append(Issue(
+                code="ALIGNMENT",
+                message=f"Alinhamento incorreto em {count} parágrafo(s) para {rules['name']}",
+                severity=IssueSeverity.INFO,
+                paragraph_index=alignment_issues[0]["index"],
+                suggestion=f"Use alinhamento {rules['msg_align']}"
+            ))
+            score -= min(count, 5)
+
+        # Espaçamento
+        if spacing_issues:
+            count = len(spacing_issues)
+            issues.append(Issue(
+                code="SPACING",
+                message=f"Espaçamento de linha incorreto em {count} parágrafos",
+                severity=IssueSeverity.INFO,
+                paragraph_index=spacing_issues[0]["index"],
+                suggestion=f"A norma {rules['name']} geralmente usa espaçamento {rules['msg_spacing']}"
+            ))
+            score -= min(count, 5)
+
+        # 3. Verificar margens (com a configuração específica da norma)
         if content.page_setup and content.page_setup.margins:
             margins = content.page_setup.margins
+            target_margins = rules["margins"]
             margin_issues = []
-
-            # Tolerância de 0.3cm para variações
             tolerance = 0.3
 
-            # Verificar margem superior (deve ser 3cm)
-            if abs(margins.top_cm - 3.0) > tolerance:
-                margin_issues.append(f"superior ({margins.top_cm}cm, deveria ser 3cm)")
-
-            # Verificar margem inferior (deve ser 2cm)
-            if abs(margins.bottom_cm - 2.0) > tolerance:
-                margin_issues.append(f"inferior ({margins.bottom_cm}cm, deveria ser 2cm)")
-
-            # Verificar margem esquerda (deve ser 3cm)
-            if abs(margins.left_cm - 3.0) > tolerance:
-                margin_issues.append(f"esquerda ({margins.left_cm}cm, deveria ser 3cm)")
-
-            # Verificar margem direita (deve ser 2cm)
-            if abs(margins.right_cm - 2.0) > tolerance:
-                margin_issues.append(f"direita ({margins.right_cm}cm, deveria ser 2cm)")
+            for side in ["top", "bottom", "left", "right"]:
+                actual = getattr(margins, f"{side}_cm", 0)
+                expected = target_margins[side]
+                if abs(actual - expected) > tolerance:
+                    margin_issues.append(f"{side} ({actual}cm, deveria {expected}cm)")
 
             if margin_issues:
                 issues.append(Issue(
-                    code="ABNT_006",
-                    message=f"Margens fora do padrão ABNT: {', '.join(margin_issues[:2])}{'...' if len(margin_issues) > 2 else ''}",
+                    code="MARGINS",
+                    message=f"Margens fora do padrão {rules['name']}: {', '.join(margin_issues[:2])}",
                     severity=IssueSeverity.WARNING,
-                    suggestion="Configure as margens: 3cm (superior/esquerda) e 2cm (inferior/direita)"
+                    suggestion=f"Ajuste as margens: Sup/Esq {target_margins['top']}cm, Inf/Dir {target_margins['bottom']}cm (valores aproximados)"
                 ))
                 score -= min(len(margin_issues) * 3, 10)
 
-        # 4. Verificar estrutura básica
+        # 4. Verificar estrutura básica (comum a todas, mas flexível)
         text_lower = full_text.lower()
-
-        has_intro = any(term in text_lower for term in ["introdução", "introducao", "1. introdução", "1 introdução"])
-        has_conclusion = any(term in text_lower for term in ["conclusão", "conclusao", "considerações finais"])
-        has_references = any(term in text_lower for term in ["referências", "referencias", "bibliografia"])
+        has_intro = any(term in text_lower for term in ["introdução", "introducao", "introduction"])
+        has_conclusion = any(term in text_lower for term in ["conclusão", "conclusao", "considerações", "conclusion"])
+        has_references = any(term in text_lower for term in ["referências", "referencias", "references", "bibliografia"])
 
         if not has_intro:
-            issues.append(Issue(
-                code="STRUCT_001",
-                message="Seção de Introdução não identificada",
-                severity=IssueSeverity.WARNING,
-                suggestion="Adicione uma seção de Introdução"
-            ))
-            score -= 5
-
+            issues.append(Issue(code="STRUCT_MISSING", message="Introdução não identificada", severity=IssueSeverity.WARNING, suggestion="Adicione uma seção introdutória"))
+            score -= 3
         if not has_conclusion:
-            issues.append(Issue(
-                code="STRUCT_002",
-                message="Seção de Conclusão não identificada",
-                severity=IssueSeverity.WARNING,
-                suggestion="Adicione uma seção de Conclusão ou Considerações Finais"
-            ))
-            score -= 5
-
+            issues.append(Issue(code="STRUCT_MISSING", message="Conclusão não identificada", severity=IssueSeverity.WARNING, suggestion="Adicione uma conclusão"))
+            score -= 3
         if not has_references:
-            issues.append(Issue(
-                code="STRUCT_003",
-                message="Seção de Referências não identificada",
-                severity=IssueSeverity.WARNING,
-                suggestion="Adicione uma seção de Referências Bibliográficas"
-            ))
+            issues.append(Issue(code="STRUCT_MISSING", message="Referências não identificadas", severity=IssueSeverity.WARNING, suggestion="Adicione as referências bibliográficas"))
             score -= 5
 
-        # Garantir score mínimo de 0
-        score = max(0, score)
+        # Garantir score de 0 a 100
+        score = max(0, min(100, score))
 
-        # Gerar sugestões
+        # Gerar sugestões finais
         suggestions = []
-        if score < 70:
-            suggestions.append("Revise a formatação do documento conforme normas ABNT")
-        if score < 50:
-            suggestions.append("Considere usar o assistente de formatação automática")
-        if not has_intro or not has_conclusion:
-            suggestions.append("Complete a estrutura básica do documento acadêmico")
-
-        # Resumo
-        if score >= 80:
-            summary = f"Documento bem formatado! Score: {score}/100"
-        elif score >= 60:
-            summary = f"Documento precisa de ajustes. Score: {score}/100"
-        else:
-            summary = f"Documento precisa de revisão significativa. Score: {score}/100"
+        if score < 100:
+            suggestions.append(f"Revise a formatação conforme normas {rules['name']}")
+        
+        summary = f"Análise {rules['name']} completa. Score: {score}/100"
 
         return AnalysisResponse(
             score=score,
@@ -340,7 +316,7 @@ async def analyze_content(content: DocumentContent):
                 "has_introduction": has_intro,
                 "has_conclusion": has_conclusion,
                 "has_references": has_references,
-                "format_type": content.format_type.value
+                "format_type": norm_key
             },
             summary=summary
         )

@@ -72,10 +72,10 @@ class PageSetup(BaseModel):
 
 
 class DocumentContent(BaseModel):
-    """Conteúdo completo do documento enviado pelo Add-in"""
+    """Conteúdo completo do documento para análise"""
     paragraphs: List[ParagraphData] = Field(..., description="Lista de parágrafos do documento")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Metadados do documento")
-    format_type: FormatType = Field(default=FormatType.ABNT, description="Tipo de formatação desejada")
+    format_type: Optional[FormatType] = FormatType.ABNT
     full_text: Optional[str] = Field(None, description="Texto completo concatenado")
     page_setup: Optional[PageSetup] = Field(None, description="Configurações de página (margens, tamanho)")
 

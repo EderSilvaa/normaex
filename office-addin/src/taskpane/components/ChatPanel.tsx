@@ -14,6 +14,8 @@ import { Card } from './ui/Card';
 
 import ProjectSelector from './ProjectSelector';
 import ResearchPanel from './ResearchPanel';
+import ComplianceScore from './ComplianceScore';
+import IssuesList from './IssuesList';
 import { theme } from '../../styles/theme';
 
 interface ChartConfig {
@@ -59,6 +61,26 @@ interface ImageAttachment {
   source?: string;
 }
 
+interface AnalysisResultData {
+  score: number;
+  issues: any[];
+  summary: string;
+}
+
+interface FormatResultData {
+  success: boolean;
+  actionsApplied: number;
+  message: string;
+}
+
+interface ReviewResultData {
+  originalText: string;
+  correctedText: string;
+  explanation: string;
+  changes: string[];
+  applied?: boolean;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -71,6 +93,9 @@ interface Message {
   wasReviewed?: boolean | null;
   reviewScore?: number | null;
   proactiveSuggestions?: ProactiveSuggestion[];
+  analysisResult?: AnalysisResultData;
+  formatResult?: FormatResultData;
+  reviewResult?: ReviewResultData;
 }
 
 interface SearchResult {
@@ -98,6 +123,12 @@ interface ChatPanelProps {
   knowledgeArea?: string;
   onSaveReference?: (ref: any) => void;
   onStructureGenerated?: (structure: string) => void;
+  onAnalyzeDocument?: () => Promise<AnalysisResultData | null>;
+  onFormatDocument?: () => Promise<FormatResultData | null>;
+  onReviewSelection?: (instruction?: string) => Promise<{ originalText: string; correctedText: string; explanation: string; changes: string[] } | null>;
+  onIssueClick?: (issue: any) => void;
+  onApplyFix?: (issue: any) => void;
+  formatType?: string;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -117,6 +148,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   knowledgeArea,
   onSaveReference,
   onStructureGenerated,
+  onAnalyzeDocument,
+  onFormatDocument,
+  onReviewSelection,
+  onIssueClick,
+  onApplyFix,
+  formatType,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -159,6 +196,136 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [chartPreview, setChartPreview] = useState<string | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
+
+  // Estado para ações rápidas (analisar, formatar, revisar)
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // === ACTION HANDLERS (Quick Actions) ===
+
+  const handleAnalyze = async () => {
+    if (!onAnalyzeDocument || actionLoading) return;
+    const userMsg: Message = {
+      id: generateId(), role: 'user', content: 'Analisar documento', timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setActionLoading(true);
+    try {
+      const result = await onAnalyzeDocument();
+      if (result) {
+        const assistantMsg: Message = {
+          id: generateId(), role: 'assistant', content: result.summary || `Score: ${result.score}/100 - ${result.issues.length} problemas encontrados.`,
+          timestamp: new Date(), analysisResult: result,
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+      }
+    } catch (error) {
+      const errorMsg: Message = {
+        id: generateId(), role: 'assistant',
+        content: `Erro ao analisar: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleFormat = async () => {
+    if (!onFormatDocument || actionLoading) return;
+    const userMsg: Message = {
+      id: generateId(), role: 'user', content: 'Formatar documento', timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setActionLoading(true);
+    try {
+      const result = await onFormatDocument();
+      if (result) {
+        const assistantMsg: Message = {
+          id: generateId(), role: 'assistant', content: result.message,
+          timestamp: new Date(), formatResult: result,
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+      }
+    } catch (error) {
+      const errorMsg: Message = {
+        id: generateId(), role: 'assistant',
+        content: `Erro ao formatar: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReview = async () => {
+    if (!onReviewSelection || actionLoading) return;
+    const userMsg: Message = {
+      id: generateId(), role: 'user', content: 'Revisar seleção', timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setActionLoading(true);
+    try {
+      const result = await onReviewSelection();
+      if (result) {
+        const assistantMsg: Message = {
+          id: generateId(), role: 'assistant', content: result.explanation,
+          timestamp: new Date(),
+          reviewResult: {
+            originalText: result.originalText,
+            correctedText: result.correctedText,
+            explanation: result.explanation,
+            changes: result.changes,
+          },
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+      }
+    } catch (error) {
+      const errorMsg: Message = {
+        id: generateId(), role: 'assistant',
+        content: `Erro ao revisar: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApplyReview = async (messageId: string, correctedText: string) => {
+    try {
+      await Word.run(async (context) => {
+        const selection = context.document.getSelection();
+        selection.insertText(correctedText, Word.InsertLocation.replace);
+        await context.sync();
+      });
+      setMessages(prev => prev.map(m =>
+        m.id === messageId && m.reviewResult
+          ? { ...m, reviewResult: { ...m.reviewResult, applied: true } }
+          : m
+      ));
+      setMessages(prev => [...prev, {
+        id: generateId(), role: 'assistant', content: 'Correção aplicada com sucesso!', timestamp: new Date(),
+      }]);
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        id: generateId(), role: 'assistant',
+        content: `Erro ao aplicar: ${error instanceof Error ? error.message : 'Selecione o texto novamente e tente de novo.'}`,
+        timestamp: new Date(),
+      }]);
+    }
+  };
+
+  const handleRejectReview = (messageId: string) => {
+    setMessages(prev => prev.map(m =>
+      m.id === messageId && m.reviewResult
+        ? { ...m, reviewResult: { ...m.reviewResult, applied: true } }
+        : m
+    ));
+    setMessages(prev => [...prev, {
+      id: generateId(), role: 'assistant', content: 'Sugestão rejeitada. Texto original mantido.', timestamp: new Date(),
+    }]);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -563,7 +730,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const quickSuggestions = [
     `Citações ${normName || 'ABNT'}`,
     'Escreva uma introdução',
-    'Revisar meu texto',
+    'Como estruturar meu TCC?',
   ];
 
   return (
@@ -820,6 +987,147 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 )
               }
 
+              {/* Card de Análise */}
+              {message.analysisResult && (
+                <div style={{
+                  maxWidth: '92%',
+                  background: '#111',
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  padding: '12px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+                    <ComplianceScore
+                      score={message.analysisResult.score}
+                      issueCount={message.analysisResult.issues.length}
+                      size="small"
+                      animate={true}
+                    />
+                  </div>
+                  {message.analysisResult.issues.length > 0 && (
+                    <IssuesList
+                      issues={message.analysisResult.issues}
+                      maxVisible={3}
+                      onIssueClick={onIssueClick}
+                      onApplyFix={onApplyFix}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Card de Formatação */}
+              {message.formatResult && (
+                <div style={{
+                  maxWidth: '92%',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: message.formatResult.success
+                    ? 'rgba(16, 185, 129, 0.1)'
+                    : 'rgba(239, 68, 68, 0.1)',
+                  border: `1px solid ${message.formatResult.success
+                    ? 'rgba(16, 185, 129, 0.3)'
+                    : 'rgba(239, 68, 68, 0.3)'}`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '16px' }}>
+                      {message.formatResult.success ? '✅' : '❌'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: theme.colors.text.primary }}>
+                      {message.formatResult.message}
+                    </span>
+                  </div>
+                  {message.formatResult.actionsApplied > 0 && (
+                    <span style={{ fontSize: '11px', color: theme.colors.text.secondary, marginTop: '4px', display: 'block' }}>
+                      {message.formatResult.actionsApplied} formatações aplicadas
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Card de Revisão */}
+              {message.reviewResult && !message.reviewResult.applied && (
+                <div style={{
+                  maxWidth: '92%',
+                  background: '#111',
+                  border: `1px solid ${theme.colors.primary}`,
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    padding: '10px 14px',
+                    background: '#1a1a1a',
+                    borderBottom: `1px solid ${theme.colors.border}`,
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                  }}>
+                    <span>✨</span>
+                    <span style={{ fontSize: '11px', color: theme.colors.text.secondary, fontWeight: 500 }}>
+                      Sugestão de Melhoria
+                    </span>
+                  </div>
+                  <div style={{ padding: '12px 14px' }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <span style={{ fontSize: '10px', color: theme.colors.text.tertiary }}>Original:</span>
+                      <div style={{
+                        fontSize: '12px', color: theme.colors.text.secondary,
+                        textDecoration: 'line-through', opacity: 0.6,
+                        padding: '6px', background: theme.colors.surface,
+                        borderRadius: '4px', marginTop: '4px',
+                        maxHeight: '80px', overflowY: 'auto',
+                      }}>
+                        {message.reviewResult.originalText}
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <span style={{ fontSize: '10px', color: theme.colors.primary }}>Sugerido:</span>
+                      <div style={{
+                        fontSize: '12px', color: theme.colors.text.primary,
+                        padding: '6px', background: theme.colors.surfaceHighlight,
+                        borderRadius: '4px', borderLeft: `2px solid ${theme.colors.primary}`,
+                        marginTop: '4px', maxHeight: '120px', overflowY: 'auto',
+                      }}>
+                        {message.reviewResult.correctedText}
+                      </div>
+                    </div>
+                    {message.reviewResult.changes.length > 0 && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <span style={{ fontSize: '10px', color: theme.colors.text.tertiary }}>Alterações:</span>
+                        <ul style={{ margin: '4px 0 0', paddingLeft: '16px' }}>
+                          {message.reviewResult.changes.map((change, i) => (
+                            <li key={i} style={{ fontSize: '11px', color: theme.colors.text.secondary, marginBottom: '2px' }}>{change}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{
+                    display: 'flex', gap: '8px', padding: '8px 12px',
+                    borderTop: `1px solid ${theme.colors.border}`,
+                  }}>
+                    <button
+                      onClick={() => handleApplyReview(message.id, message.reviewResult!.correctedText)}
+                      style={{
+                        flex: 1, padding: '8px', borderRadius: '6px', border: 'none',
+                        background: '#16a34a', color: 'white', fontSize: '12px',
+                        fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      Aceitar
+                    </button>
+                    <button
+                      onClick={() => handleRejectReview(message.id)}
+                      style={{
+                        flex: 1, padding: '8px', borderRadius: '6px', border: 'none',
+                        background: '#dc2626', color: 'white', fontSize: '12px',
+                        fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      Rejeitar
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <span style={{ fontSize: '10px', color: theme.colors.text.tertiary }}>
                 {formatTime(message.timestamp)}
               </span>
@@ -827,9 +1135,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           );
         })}
 
-        {sending && (
+        {(sending || actionLoading) && (
           <div style={{ padding: '8px', background: theme.colors.surfaceHighlight, borderRadius: '12px', width: 'fit-content' }}>
-            <span style={{ fontSize: '12px', color: theme.colors.text.secondary }}>Digitando...</span>
+            <span style={{ fontSize: '12px', color: theme.colors.text.secondary }}>
+              {actionLoading ? 'Processando...' : 'Digitando...'}
+            </span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -1320,6 +1630,77 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           </div>
         )
       }
+
+      {/* Quick Actions Toolbar */}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        flexWrap: 'wrap',
+        flexShrink: 0,
+      }}>
+        {onAnalyzeDocument && (
+          <button onClick={handleAnalyze} disabled={actionLoading || sending} title="Analisar documento"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '5px 10px', borderRadius: '16px',
+              border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
+              color: theme.colors.text.secondary, fontSize: '11px',
+              cursor: actionLoading || sending ? 'not-allowed' : 'pointer',
+              opacity: actionLoading || sending ? 0.5 : 1,
+              whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
+            }}>
+            <span style={{ fontSize: '12px' }}>📊</span><span>Analisar</span>
+          </button>
+        )}
+        {onFormatDocument && (
+          <button onClick={handleFormat} disabled={actionLoading || sending} title="Formatar documento"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '5px 10px', borderRadius: '16px',
+              border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
+              color: theme.colors.text.secondary, fontSize: '11px',
+              cursor: actionLoading || sending ? 'not-allowed' : 'pointer',
+              opacity: actionLoading || sending ? 0.5 : 1,
+              whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
+            }}>
+            <span style={{ fontSize: '12px' }}>🎨</span><span>Formatar</span>
+          </button>
+        )}
+        {onReviewSelection && (
+          <button onClick={handleReview} disabled={actionLoading || sending} title="Revisar seleção"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '5px 10px', borderRadius: '16px',
+              border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
+              color: theme.colors.text.secondary, fontSize: '11px',
+              cursor: actionLoading || sending ? 'not-allowed' : 'pointer',
+              opacity: actionLoading || sending ? 0.5 : 1,
+              whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
+            }}>
+            <span style={{ fontSize: '12px' }}>✏️</span><span>Revisar</span>
+          </button>
+        )}
+        <button onClick={() => setShowResearchModal(true)} title="Pesquisa acadêmica"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '5px 10px', borderRadius: '16px',
+            border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
+            color: theme.colors.text.secondary, fontSize: '11px',
+            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
+          }}>
+          <span style={{ fontSize: '12px' }}>🔍</span><span>Pesquisa</span>
+        </button>
+        <button onClick={() => setShowProjectSelector(true)} title="Projetos"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '5px 10px', borderRadius: '16px',
+            border: `1px solid ${theme.colors.border}`, background: theme.colors.surface,
+            color: theme.colors.text.secondary, fontSize: '11px',
+            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s',
+          }}>
+          <span style={{ fontSize: '12px' }}>📁</span><span>Projetos</span>
+        </button>
+      </div>
 
       {/* Input com botão de anexar */}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>

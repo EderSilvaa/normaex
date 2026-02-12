@@ -7,6 +7,7 @@ import Image from '@tiptap/extension-image';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import Toolbar from './Toolbar';
+import ChatPanel from './ChatPanel';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
@@ -16,9 +17,10 @@ interface EditorProps {
     filename: string;
     initialContent?: string;
     onClose: () => void;
+    analysis?: any;
 }
 
-export default function Editor({ filename }: EditorProps) {
+export default function Editor({ filename, onClose, analysis }: EditorProps) {
     const [loading, setLoading] = useState(true);
     const [content, setContent] = useState('');
 
@@ -87,42 +89,49 @@ export default function Editor({ filename }: EditorProps) {
     }
 
     return (
-        <div className="flex flex-col h-screen bg-[#111] text-white overflow-hidden">
-            {/* Header / Top Bar */}
-            <div className="flex items-center justify-between px-6 py-3 bg-[#1a1a1a] border-b border-white/10">
-                <div className="flex items-center gap-4">
-                    {/* Back button logic could go here or in parent */}
-                    <h1 className="text-sm font-medium text-gray-300">
-                        Editando: <span className="text-white">{filename}</span>
-                    </h1>
-                </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">Modo Edição Beta</span>
-                </div>
-            </div>
+        <div className="flex h-screen bg-[#111] text-white overflow-hidden">
+            {/* Main Editor Area */}
+            <div className="flex-1 flex flex-col min-w-0">
 
-            {/* Toolbar */}
-            <div className="flex justify-center bg-[#1a1a1a]">
-                <div className="w-full max-w-[210mm]">
-                    <Toolbar editor={editor} />
-                </div>
-            </div>
+                {/* Minimal Top Bar for Editor context (Optional, or just Sidebar) */}
+                {/* <div className="h-10 flex items-center px-4 bg-[#1a1a1a] border-b border-white/5">
+                    <span className="text-xs text-gray-500">{filename}</span>
+                </div> */}
 
-            {/* Editor Area (A4 Simulation) */}
-            <div className="flex-1 overflow-y-auto bg-[#0a0a0a] p-8 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                <div className="flex justify-center min-h-full pb-20">
-                    <div
-                        className="bg-white text-black shadow-2xl min-h-[297mm] w-[210mm] p-[1.5cm] origin-top transition-transform duration-200 cursor-text"
-                        onClick={() => editor?.chain().focus().run()}
-                        style={{
-                            // Styles to make it look like a page
-                            boxShadow: '0 0 50px rgba(0,0,0,0.5)',
-                        }}
-                    >
-                        <EditorContent editor={editor} />
+                {/* Toolbar */}
+                <div className="flex justify-center bg-[#1a1a1a]">
+                    <div className="w-full max-w-[210mm]">
+                        <Toolbar editor={editor} />
+                    </div>
+                </div>
+
+                {/* Editor Scroll Area */}
+                <div className="flex-1 overflow-y-auto bg-[#0a0a0a] p-8 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                    <div className="flex justify-center min-h-full pb-20">
+                        <div
+                            className="bg-white text-black shadow-2xl min-h-[297mm] w-[210mm] p-[1.5cm] origin-top transition-transform duration-200 cursor-text"
+                            onClick={() => editor?.chain().focus().run()}
+                            style={{
+                                // Styles to make it look like a page
+                                boxShadow: '0 0 50px rgba(0,0,0,0.5)',
+                            }}
+                        >
+                            <EditorContent editor={editor} />
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* Chat First Panel - Right Side */}
+            <ChatPanel
+                filename={filename}
+                editor={editor}
+                analysis={analysis}
+                onClose={() => {
+                    // Logic to close/minimize panel if needed
+                    onClose();
+                }}
+            />
         </div>
     );
 }

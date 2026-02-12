@@ -99,6 +99,7 @@ export default function FileUpload() {
       <Editor
         filename={uploadedFilename}
         onClose={handleReset}
+        analysis={analysis}
       />
     );
   }

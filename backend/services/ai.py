@@ -26,19 +26,25 @@ def get_model():
     return genai.GenerativeModel('gemini-2.5-flash')
 
 
-def organize_references_ai(text_content: str) -> str:
+def organize_references_ai(text_content: str, format_type: str = "abnt") -> str:
     """
-    Receives raw reference text and returns it organized according to ABNT.
+    Receives raw reference text and returns it organized according to the specified norm.
     """
     try:
         model = get_model()
+        norm_rules = get_norm_rules(format_type)
+        
         prompt = f"""
-        Você é um especialista em normas ABNT.
+        Você é um especialista em normas acadêmicas, especificamente {format_type.upper()}.
         Abaixo está uma lista de referências bibliográficas desorganizada.
+        
+        REGRAS DA NORMA {format_type.upper()}:
+        {norm_rules}
+
         Sua tarefa é:
         1. Identificar cada referência.
-        2. Corrigir a formatação de cada uma para o padrão ABNT (negrito no título, ordem correta autor/ano, etc).
-        3. Ordená-las alfabeticamente.
+        2. Corrigir a formatação de cada uma para o padrão {format_type.upper()}.
+        3. Ordená-las conforme a norma (alfabética ou numérica de aparição e.g. Vancouver/IEEE - se não tiver ordem, use alfabética).
         4. Retornar APENAS a lista formatada, separada por quebras de linha, sem introduções ou explicações.
 
         Texto original:
@@ -165,8 +171,12 @@ def chat_with_document(
                     print(f"[Chat] Falha no RAG, usando texto completo: {e}")
 
         # Construir o prompt
+        norm_rules = get_norm_rules(format_type)
         prompt = f"""Você é um assistente acadêmico especializado em normas {format_type.upper()}.
 Mantenha tom formal e acadêmico. {rag_note}
+
+REGRAS ESPECÍFICAS DA NORMA {format_type.upper()}:
+{norm_rules}
 
 {memory_context}
 {events_context}
@@ -271,21 +281,25 @@ Responda APENAS com os termos separados por vírgula, sem explicações. Ex: "ar
         # 3. Formatar com IA usando dados REAIS
         papers_text = academic_search.format_papers_for_prompt(papers)
 
+        norm_rules = get_norm_rules(format_type)
         format_prompt = f"""Formate as referências abaixo no padrão {format_type.upper()}.
-Use APENAS os dados fornecidos. NÃO invente ou altere nenhum dado (autores, anos, títulos, DOIs).
-
-PAPERS REAIS ENCONTRADOS:
-{papers_text}
-
-REGRAS:
-1. Use EXATAMENTE os nomes dos autores, títulos e anos fornecidos
-2. Formate segundo a norma {format_type.upper()}
-3. Ordene alfabeticamente pelo sobrenome do primeiro autor
-4. Mantenha os DOIs como links
-5. NÃO adicione papers que não estão na lista acima
-6. Retorne APENAS as referências formatadas, uma por linha
-
-Formate agora:"""
+        Use APENAS os dados fornecidos. NÃO invente ou altere nenhum dado (autores, anos, títulos, DOIs).
+        
+        PAPERS REAIS ENCONTRADOS:
+        {papers_text}
+        
+        REGRAS ESPECÍFICAS DA NORMA {format_type.upper()}:
+        {norm_rules}
+        
+        REGRAS GERAIS:
+        1. Use EXATAMENTE os nomes dos autores, títulos e anos fornecidos
+        2. Formate segundo a norma {format_type.upper()} e as regras acima
+        3. Ordene alfabeticamente pelo sobrenome do primeiro autor (ou numérico se a norma exigir)
+        4. Mantenha os DOIs como links
+        5. NÃO adicione papers que não estão na lista acima
+        6. Retorne APENAS as referências formatadas, uma por linha
+        
+        Formate agora:"""
 
         format_response = model.generate_content(format_prompt, generation_config={
             "max_output_tokens": 4096,
