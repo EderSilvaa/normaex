@@ -44,7 +44,11 @@ from services.inline_review import review_selection
 from services.ai import (
     chat_with_document,
     generate_academic_text,
-    generate_academic_text_stream
+    generate_academic_text_async,
+    generate_academic_text_stream,
+    review_generated_text,
+    review_generated_text_async,
+    detect_write_intent_ai
 )
 from services.ai_structural import analyze_document_with_ai
 from services.ai_writer import write_structured_streaming
@@ -554,16 +558,14 @@ async def write_text(request: Request, write_request: WriteRequest):
 # CHAT (com detecção de escrita integrada)
 # ============================================
 
-def detect_write_intent(message: str) -> tuple[bool, str, str]:
+async def detect_write_intent(message: str) -> tuple[bool, str, str]:
     """
     Detecta se o usuário quer gerar texto usando IA.
     Fallback para keywords se a IA falhar.
     Retorna: (is_write_intent, instruction, section_type)
     """
-    from services.ai import detect_write_intent_ai
-
     # Usar IA para detecção semântica
-    result = detect_write_intent_ai(message)
+    result = await detect_write_intent_ai(message)
     
     is_write = result.get("is_write", False)
     section_type = result.get("section_type", "geral")
@@ -623,7 +625,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
 5. Se o usuário perguntar sobre algo específico dos documentos, busque a informação relevante"""
 
         # Detectar se é uma solicitação de escrita
-        is_write, instruction, section_type = detect_write_intent(chat_request.message)
+        is_write, instruction, section_type = await detect_write_intent(chat_request.message)
 
         if is_write:
             # Modo de escrita: gerar texto acadêmico usando contexto expandido
@@ -641,7 +643,7 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                     num_refs=8
                 )
             else:
-                generated_text = generate_academic_text(
+                generated_text = await generate_academic_text_async(
                     document_context=context[:context_limit],
                     instruction=instruction,
                     section_type=section_type,
@@ -652,8 +654,8 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 )
 
             # Auto-revisão do texto gerado
-            from services.ai import review_generated_text
-            review = review_generated_text(
+            # Auto-revisão do texto gerado
+            review = await review_generated_text_async(
                 text=generated_text,
                 section_type=section_type,
                 format_type=chat_request.format_type.value,
@@ -720,22 +722,22 @@ CONTEÚDO EXTRAÍDO DOS DOCUMENTOS DE REFERÊNCIA:
                 events=chat_request.events
             )
 
-            # Análise proativa (apenas se tiver contexto suficiente)
+            # Análise proativa (DESATIVADA TEMPORARIAMENTE PARA ECONOMIA DE QUOTA)
             proactive_suggestions = []
-            if len(context) > 500 and "Erro" not in response_text:
-                try:
-                    from services.ai import analyze_document_gaps
-                    gaps = analyze_document_gaps(context, norm=chat_request.format_type.value)
-                    
-                    for gap in gaps:
-                        proactive_suggestions.append(ProactiveSuggestion(
-                            type=gap["type"],
-                            message=gap["message"],
-                            action=gap["action"],
-                            section_type=gap["section_type"]
-                        ))
-                except Exception as e:
-                    print(f"Erro na análise proativa: {e}")
+            # if len(context) > 500 and "Erro" not in response_text:
+            #     try:
+            #         from services.ai import analyze_document_gaps
+            #         gaps = analyze_document_gaps(context, norm=chat_request.format_type.value)
+            #         
+            #         for gap in gaps:
+            #             proactive_suggestions.append(ProactiveSuggestion(
+            #                 type=gap["type"],
+            #                 message=gap["message"],
+            #                 action=gap["action"],
+            #                 section_type=gap["section_type"]
+            #             ))
+            #     except Exception as e:
+            #         print(f"Erro na análise proativa: {e}")
 
             # Sugestões contextualizadas
             suggestions = []

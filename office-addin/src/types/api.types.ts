@@ -165,6 +165,12 @@ export interface ChatResponse {
   suggestions?: string[];
   context_info?: ContextInfo | null;
   generated_content?: string | null;
+
+  // Extended fields
+  was_reviewed?: boolean;
+  review_score?: number;
+  detailed_review?: any;
+  proactive_suggestions?: any[];
 }
 
 // ============================================

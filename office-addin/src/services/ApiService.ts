@@ -34,9 +34,9 @@ const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
 
-    // Desenvolvimento local
+    // Desenvolvimento local (HTTPS obrigatório - WebView2 bloqueia mixed content)
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8000/api/addin';
+      return 'https://localhost:8000/api/addin';
     }
 
     // Produção - usar API no mesmo domínio base ou subdomínio
@@ -44,8 +44,8 @@ const getApiBaseUrl = (): string => {
     // return 'https://api.normaex.com.br/api/addin';
   }
 
-  // Fallback para SSR ou testes - FORÇANDO LOCALHOST PARA DEV
-  return 'http://localhost:8000/api/addin';
+  // Fallback para SSR ou testes
+  return 'https://localhost:8000/api/addin';
 };
 
 const API_BASE_URL = getApiBaseUrl();

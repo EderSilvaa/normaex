@@ -208,6 +208,10 @@ const App: React.FC<AppProps> = ({ title }) => {
       suggestions: result.suggestions,
       context_info: result.context_info,
       generated_content: result.generated_content,
+      was_reviewed: result.was_reviewed,
+      review_score: result.review_score,
+      detailed_review: result.detailed_review,
+      proactive_suggestions: result.proactive_suggestions,
     };
   }, [selectedProjectId, workConfig, projectMemory, events]);
 

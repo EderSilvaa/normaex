@@ -1,77 +1,144 @@
-# Normaex 2.0 - Estrutura do Projeto
+# Normaex 2.0 - Arquitetura do Projeto
 
-**Assistente de IA para Documentos Acadêmicos com formatação ABNT**
-
----
-
-## Visão Geral
-
-O Normaex é um Office Add-in para Microsoft Word que auxilia na formatação de documentos acadêmicos conforme normas ABNT. O sistema possui:
-
-- **Backend**: API FastAPI com Python + Gemini AI
-- **Frontend**: Office Add-in com React + TypeScript
-- **Funcionalidades**: Análise ABNT, Chat com IA, Geração de texto, Contexto de PDFs
+**Assistente de IA para documentos academicos com formatacao ABNT, APA, Vancouver e IEEE**
 
 ---
 
-## Estrutura de Diretórios
+## Visao Geral
+
+O Normaex e um sistema de 3 camadas para auxiliar estudantes universitarios na escrita e formatacao de trabalhos academicos:
+
+```
+                          +------------------+
+                          |   Microsoft Word |
+                          |   (Office.js)    |
+                          +--------+---------+
+                                   |
+                          +--------v---------+
+                          |  Office Add-in   |  React + TypeScript
+                          |  (localhost:3001) |  WebView2/Edge
+                          +--------+---------+
+                                   |
+                          +--------v---------+
+                          |  Backend API     |  FastAPI + Python
+                          |  (localhost:8000) |  Gemini AI
+                          +--------+---------+
+                                   |
+                   +---------------+---------------+
+                   |               |               |
+            +------v------+ +-----v------+ +------v------+
+            | Google       | | PDF Files  | | JSON Storage|
+            | Gemini 2.5   | | (uploads/) | | (data/)     |
+            +--------------+ +------------+ +-------------+
+```
+
+---
+
+## Estrutura de Diretorios
 
 ```
 normaex/
-├── backend/                    # API FastAPI (Python)
-│   ├── main.py                 # Ponto de entrada da aplicação
+├── backend/                        # API FastAPI (Python)
+│   ├── main.py                     # Entrada: CORS, routers, health
+│   ├── requirements.txt            # Dependencias Python
+│   ├── .env                        # GEMINI_API_KEY (nao versionado)
 │   ├── data/
-│   │   └── projects.json       # Persistência de projetos e PDFs
+│   │   ├── projects.json           # Persistencia de projetos
+│   │   └── projects/               # Dados por projeto
 │   ├── uploads/
-│   │   └── pdfs/               # PDFs enviados pelos usuários
+│   │   └── pdfs/                   # PDFs dos usuarios
 │   ├── models/
-│   │   ├── __init__.py
-│   │   ├── addin_models.py     # Models para o Office Add-in
-│   │   └── project_models.py   # Models para projetos e PDFs
+│   │   ├── addin_models.py         # Models do Add-in (Pydantic)
+│   │   ├── project_models.py       # Models de Projetos/PDFs
+│   │   └── research_models.py      # Models de Pesquisa
 │   ├── routers/
-│   │   ├── addin.py            # Endpoints do Add-in (chat, análise, formatação)
-│   │   ├── document.py         # Endpoints de documentos
-│   │   └── projects.py         # Endpoints de projetos e PDFs
-│   └── services/
-│       ├── ai.py               # Integração com Gemini AI
-│       ├── ai_structural.py    # Análise estrutural com IA
-│       ├── ai_writer.py        # Geração de texto acadêmico
-│       ├── abnt.py             # Regras de formatação ABNT
-│       ├── pdf_service.py      # Extração de texto de PDFs
-│       ├── project_service.py  # CRUD de projetos
-│       ├── validator.py        # Validação de documentos
-│       ├── document_vision.py  # Análise de imagens
-│       └── executor.py         # Execução de tarefas
+│   │   ├── addin.py                # /api/addin/* (chat, analise, formato)
+│   │   ├── projects.py             # /api/projects/* (CRUD projetos)
+│   │   ├── research.py             # /api/research/* (busca academica)
+│   │   └── document.py             # /api/document/* (processamento)
+│   ├── services/
+│   │   ├── ai.py                   # Integracao Gemini AI (async + retry)
+│   │   ├── ai_writer.py            # Geracao de texto com streaming
+│   │   ├── ai_structural.py        # Analise estrutural
+│   │   ├── abnt.py                 # Regras de formatacao ABNT
+│   │   ├── pdf_service.py          # Extracao de texto de PDFs (PyMuPDF)
+│   │   ├── project_service.py      # CRUD projetos (JSON)
+│   │   ├── rag.py                  # Retrieval-Augmented Generation
+│   │   ├── inline_review.py        # Revisao inline de selecao
+│   │   ├── chart_service.py        # Geracao de graficos
+│   │   ├── academic_search.py      # Busca academica + referencias
+│   │   ├── sanitizer.py            # Sanitizacao de prompts
+│   │   ├── validator.py            # Validacao de documentos
+│   │   ├── document_vision.py      # Analise visual de documentos
+│   │   └── executor.py             # Execucao de tarefas
+│   └── tests/
+│       └── test_async_backend.py   # Testes async
 │
-├── office-addin/               # Frontend React/TypeScript
-│   ├── package.json
-│   ├── tsconfig.json
+├── office-addin/                   # Office Add-in (React + TypeScript)
+│   ├── package.json                # Dependencias npm
+│   ├── webpack.config.js           # Build + dev server (HTTPS :3001)
+│   ├── tsconfig.json               # TypeScript config
+│   ├── manifest.xml                # Manifest PRODUCAO (normaex.com.br)
+│   ├── manifest.dev.xml            # Manifest DEV (localhost:3001)
+│   ├── sideload.ps1                # Registra manifest no registry
+│   ├── clear-word-cache.ps1        # Limpa cache do Office
+│   ├── enable-edge-loopback.ps1    # Habilita loopback Edge (Admin)
+│   ├── assets/                     # Icones do add-in (16-128px)
 │   └── src/
+│       ├── config/
+│       │   └── norms.config.ts     # Config por norma (ABNT, APA, etc)
+│       ├── hooks/
+│       │   ├── useChat.ts          # Hook de estado do chat
+│       │   └── useChatActions.ts   # Hook de acoes (analisar, formatar)
 │       ├── services/
-│       │   ├── index.ts
-│       │   ├── ApiService.ts       # Chamadas à API backend
-│       │   ├── DocumentService.ts  # Manipulação do documento Word
-│       │   └── StreamingService.ts # Streaming de texto
+│       │   ├── index.ts            # Re-exports
+│       │   ├── ApiService.ts       # Cliente HTTP (auto-detect env)
+│       │   ├── DocumentService.ts  # Manipulacao Word via Office.js
+│       │   └── StreamingService.ts # Respostas SSE
+│       ├── styles/
+│       │   ├── theme.ts            # Tema dark (cores, spacing, typo)
+│       │   └── taskpane.css        # Estilos globais
 │       ├── types/
-│       │   ├── index.ts
-│       │   └── api.types.ts        # Tipos TypeScript (espelham models Python)
+│       │   ├── index.ts            # Re-exports
+│       │   ├── api.types.ts        # Tipos API (espelham Pydantic)
+│       │   └── chat.types.ts       # Tipos do chat (Message, etc)
 │       └── taskpane/
-│           ├── index.html
-│           ├── taskpane.tsx        # Entrada do React
-│           ├── styles/
-│           │   └── taskpane.css    # Estilos globais
+│           ├── index.html          # Template HTML (Office.js CDN)
+│           ├── taskpane.tsx        # Entrada React + Office.onReady
 │           └── components/
-│               ├── index.ts
-│               ├── App.tsx             # Componente principal
-│               ├── ChatPanel.tsx       # Chat com IA
-│               ├── ProjectSelector.tsx # Seleção de projetos e PDFs
-│               ├── ComplianceScore.tsx # Score de conformidade ABNT
-│               ├── IssuesList.tsx      # Lista de problemas
-│               ├── FormatControls.tsx  # Controles de formatação
-│               ├── TabNavigation.tsx   # Navegação entre abas
-│               └── WritingAssistant.tsx # Assistente de escrita
+│               ├── App.tsx                # Raiz: estado, memoria, config
+│               ├── ChatPanel.tsx          # Chat principal (imagens, graficos)
+│               ├── NormSelector.tsx       # Seletor de norma/area/tipo
+│               ├── ProjectSelector.tsx    # CRUD projetos + upload PDF
+│               ├── ResearchPanel.tsx      # Pesquisa academica + estrutura
+│               ├── ComplianceScore.tsx    # Score animado 0-100
+│               ├── IssuesList.tsx         # Lista de problemas
+│               ├── InlineReviewPanel.tsx  # Revisao de selecao
+│               ├── FormatControls.tsx     # Toolbar de formatacao
+│               ├── WritingAssistant.tsx   # Assistente de escrita
+│               ├── chat/
+│               │   ├── ChatInput.tsx      # Input + botao acoes
+│               │   ├── MessageList.tsx    # Scroll de mensagens
+│               │   ├── MessageBubble.tsx  # Bolha individual
+│               │   └── RubricCard.tsx     # Card de avaliacao rubrica
+│               └── ui/
+│                   ├── Button.tsx         # Botao reutilizavel
+│                   ├── Card.tsx           # Card reutilizavel
+│                   └── Input.tsx          # Input reutilizavel
 │
-└── ESTRUTURA.md                # Este arquivo
+├── frontend/                       # Landing Page (Next.js) - normaex.com.br
+│   ├── package.json                # Next.js 16, React 19, Tailwind 4
+│   ├── next.config.ts
+│   └── app/
+│       ├── page.tsx                # Home
+│       ├── tool/page.tsx           # Pagina da ferramenta
+│       └── layout.tsx              # Layout raiz
+│
+├── scripts/                        # Scripts utilitarios
+├── ESTRUTURA.md                    # Este arquivo
+├── DEPLOY.md                       # Guia de deploy (Vercel + Railway)
+├── OFFICE_ADDIN_DEV_GUIDE.md       # Guia dev + troubleshooting do add-in
+└── .gitignore
 ```
 
 ---
@@ -79,267 +146,265 @@ normaex/
 ## Backend (FastAPI + Python)
 
 ### main.py
-Ponto de entrada da API. Configura CORS, inclui routers e inicia uvicorn.
+Ponto de entrada. Configura CORS, rate limiting (slowapi), inclui routers.
 
 ```bash
-# Executar backend
 cd backend
 python -m uvicorn main:app --reload --port 8000
 ```
 
-### Models
+### Routers e Endpoints
 
-#### addin_models.py
-Define estruturas de dados para comunicação com o Add-in:
-
-| Model | Descrição |
-|-------|-----------|
-| `DocumentContent` | Conteúdo do documento Word (parágrafos, margens, etc.) |
-| `ParagraphData` | Dados de um parágrafo (texto, fonte, alinhamento) |
-| `AnalysisResponse` | Resposta da análise ABNT (score, issues, sugestões) |
-| `Issue` | Problema encontrado no documento |
-| `ChatRequest` | Requisição de chat (mensagem, contexto, project_id) |
-| `ChatResponse` | Resposta do chat (mensagem, sugestões, context_info) |
-| `ContextInfo` | Info sobre PDFs usados como contexto |
-| `WriteRequest` | Requisição de geração de texto |
-| `FormatAction` | Ação de formatação a aplicar |
-
-#### project_models.py
-Define estruturas para projetos e PDFs:
-
-| Model | Descrição |
-|-------|-----------|
-| `Project` | Projeto com nome, descrição e lista de PDFs |
-| `PDFDocument` | Documento PDF com texto extraído |
-| `PDFStatus` | Status do PDF (pending, processing, ready, error) |
-
-### Routers
-
-#### addin.py - `/api/addin`
-Endpoints principais do Office Add-in:
-
-| Endpoint | Método | Descrição |
+#### `/api/addin` (addin.py) - Endpoints do Office Add-in
+| Endpoint | Metodo | Descricao |
 |----------|--------|-----------|
-| `/analyze-content` | POST | Analisa conformidade ABNT |
-| `/format-content` | POST | Gera instruções de formatação |
-| `/chat` | POST | Chat contextualizado com IA |
-| `/write` | POST | Gera texto acadêmico |
-| `/write-stream` | POST | Gera texto via streaming (SSE) |
-| `/improve` | POST | Melhora texto selecionado |
 | `/health` | GET | Health check |
+| `/analyze-content` | POST | Analise de conformidade (ABNT/APA/etc) |
+| `/format-content` | POST | Gera instrucoes de formatacao |
+| `/chat` | POST | Chat contextualizado (com RAG de PDFs) |
+| `/write` | POST | Geracao de texto academico |
+| `/write-stream` | POST | Geracao via streaming (SSE) |
+| `/improve` | POST | Melhoria de texto |
+| `/inline-review` | POST | Revisao de selecao de texto |
+| `/review-selection` | POST | Revisao detalhada com rubrica |
+| `/image-proxy` | POST | Proxy de imagens para o add-in |
+| `/chart` | POST | Geracao de graficos (matplotlib) |
 
-#### projects.py - `/api/projects`
-Gerenciamento de projetos e PDFs:
-
-| Endpoint | Método | Descrição |
+#### `/api/projects` (projects.py) - Projetos e PDFs
+| Endpoint | Metodo | Descricao |
 |----------|--------|-----------|
 | `/` | GET | Lista projetos |
 | `/` | POST | Cria projeto |
-| `/{id}` | GET | Obtém projeto |
-| `/{id}` | PUT | Atualiza projeto |
-| `/{id}` | DELETE | Deleta projeto |
+| `/{id}` | GET/PUT/DELETE | CRUD de projeto |
 | `/{id}/pdfs` | POST | Upload de PDF |
 | `/{id}/pdfs/{pdf_id}` | DELETE | Remove PDF |
-| `/{id}/context` | GET | Obtém contexto combinado dos PDFs |
+| `/{id}/context` | GET | Contexto combinado dos PDFs (RAG) |
+
+#### `/api/research` (research.py) - Pesquisa Academica
+| Endpoint | Metodo | Descricao |
+|----------|--------|-----------|
+| `/structure` | POST | Gera estrutura de TCC/monografia |
+| `/search` | POST | Busca obras academicas + formata referencias |
 
 ### Services
 
-| Service | Descrição |
-|---------|-----------|
-| `ai.py` | Integração com Google Gemini AI |
-| `ai_writer.py` | Geração de texto acadêmico com streaming |
-| `ai_structural.py` | Análise estrutural de documentos |
-| `pdf_service.py` | Extração de texto de PDFs (PyMuPDF) |
-| `project_service.py` | CRUD de projetos, persistência JSON |
-| `abnt.py` | Regras e validações ABNT |
-| `validator.py` | Validação de documentos |
+| Service | Funcao |
+|---------|--------|
+| `ai.py` | Gemini 2.5 Flash: geracao, analise, chat. Retry com backoff exponencial |
+| `ai_writer.py` | Geracao de texto longo com streaming SSE |
+| `ai_structural.py` | Classificacao de secoes e analise estrutural |
+| `abnt.py` | Regras ABNT: fonte, margem, espacamento, recuo, estrutura |
+| `rag.py` | RAG: combina contexto de PDFs para enriquecer prompts |
+| `pdf_service.py` | Extracao de texto via PyMuPDF (fitz) |
+| `project_service.py` | Persistencia em JSON, CRUD projetos |
+| `inline_review.py` | Correcao inline com diff de mudancas |
+| `chart_service.py` | Graficos via matplotlib (barra, pizza, linha, area) |
+| `academic_search.py` | Busca e formatacao de referencias (ABNT, APA, etc) |
+
+### Models (Pydantic)
+
+| Model | Descricao |
+|-------|-----------|
+| `DocumentContent` | Conteudo do documento Word (paragrafos, margens) |
+| `ParagraphData` | Dados de um paragrafo (texto, fonte, alinhamento) |
+| `AnalysisResponse` | Resposta da analise (score, issues, sugestoes) |
+| `Issue` | Problema encontrado (code, severity, location, auto_fix) |
+| `ChatRequest` | Requisicao de chat (message, context, project_id, memory) |
+| `ChatResponse` | Resposta do chat (message, suggestions, context_info, review) |
+| `FormatAction` | Acao de formatacao a aplicar no documento |
+| `Project` | Projeto com nome, descricao e lista de PDFs |
+| `InlineReviewRequest` | Texto selecionado para revisao |
 
 ---
 
-## Frontend (Office Add-in + React)
+## Office Add-in (React + TypeScript)
+
+### Arquitetura de UI (Chat-First)
+
+A interface e centrada em um chat unico que integra todas as funcionalidades:
+
+```
++------------------------------------------+
+|  Normaex          [ABNT NBR]  (*)        |  <- Header slim
++------------------------------------------+
+|                                          |
+|  [Mensagens do chat]                     |  <- MessageList
+|  - Welcome                               |
+|  - Analise: Score 85/100                 |
+|  - Formatacao aplicada                   |
+|  - Revisao com diff                      |
+|                                          |
++------------------------------------------+
+|  [Sugestoes rapidas]                     |  <- Chips clicaveis
++------------------------------------------+
+|  [+] [Digite sua mensagem...]      [->]  |  <- ChatInput
++------------------------------------------+
+```
+
+O botao `[+]` abre um menu de acoes:
+- Analisar Documento
+- Formatar Documento
+- Revisar Selecao
+- Inserir Imagem (PC / Banco)
+- Criar Grafico
+- Pesquisa Academica
+- Gerenciar Projetos
+
+### Componentes Principais
+
+**App.tsx** - Componente raiz
+- Estado: Office init, backend status, projeto selecionado, config norma
+- Memoria do projeto (localStorage): estrutura + referencias salvas
+- Callbacks para chat, analise, formatacao, revisao, insercao
+
+**ChatPanel.tsx** - Interface do chat
+- Integra `useChat` + `useChatActions` hooks
+- Suporta texto, imagens, graficos
+- Modais: Projeto, Pesquisa, Busca Imagem, Criador Grafico
+- Indicador de contexto PDF ativo
+
+**NormSelector.tsx** - Configuracao
+- Norma: ABNT / APA / Vancouver / IEEE
+- Area do conhecimento
+- Tipo de trabalho (TCC, monografia, artigo, etc)
 
 ### Services
 
-#### ApiService.ts
-Comunicação com o backend:
+**ApiService.ts** - Cliente HTTP
+- Auto-detecta ambiente (localhost vs producao)
+- Dev: `http://localhost:8000/api/addin`
+- Prod: `https://api.normaex.com.br/api/addin`
 
-```typescript
-// Principais métodos
-ApiService.checkHealth()           // Verifica status
-ApiService.analyzeContent(content) // Análise ABNT
-ApiService.chat(request)           // Chat com IA
-ApiService.listProjects()          // Lista projetos
-ApiService.createProject(data)     // Cria projeto
-ApiService.uploadPDF(projectId, file) // Upload PDF
-```
+**DocumentService.ts** - Manipulacao do Word
+- `getDocumentContent()` - Extrai paragrafos, fontes, estilos
+- `getDocumentContentWithMargins()` - Inclui margens da pagina
+- `insertText()` / `insertHtml()` - Insere conteudo
+- `applyFormatting(actions)` - Aplica acoes de formatacao
+- `goToParagraph(index)` - Navega para paragrafo
+- `insertImageWithCaption()` - Imagem com legenda ABNT
 
-#### DocumentService.ts
-Manipulação do documento Word via Office.js:
-
-```typescript
-// Principais métodos
-DocumentService.getDocumentContent()      // Obtém conteúdo
-DocumentService.insertText(text)          // Insere texto
-DocumentService.applyABNTFormatting()     // Aplica formatação ABNT
-DocumentService.formatSelection(options)  // Formata seleção
-DocumentService.goToParagraph(index)      // Navega para parágrafo
-```
-
-### Components
-
-#### App.tsx
-Componente raiz que gerencia:
-- Estado da aplicação (análise, projeto selecionado, etc.)
-- Tabs: ABNT (análise + formatação) e Chat (conversa + escrita)
-- Integração entre componentes
-
-#### ChatPanel.tsx
-Chat com a IA:
-- Histórico de mensagens
-- Indicador de contexto de PDFs
-- Detecção de texto gerado
-- Botão "Inserir no Documento"
-
-#### ProjectSelector.tsx
-Gerenciamento de projetos:
-- Criar/deletar projetos
-- Upload/remoção de PDFs
-- Exibe contagem de páginas e palavras
-- Notifica mudanças ao componente pai
-
-#### ComplianceScore.tsx
-Exibe score de conformidade ABNT (0-100) com animação.
-
-#### IssuesList.tsx
-Lista problemas encontrados com:
-- Severidade (error, warning, info)
-- Navegação para localização
-- Botão de correção automática
-
-#### FormatControls.tsx
-Controles de formatação:
-- Formatação automática ABNT
-- Estilos de título (H1, H2, H3)
-- Citação em bloco
-- Fonte, tamanho, alinhamento
-
----
-
-## Fluxo de Dados
-
-### Chat com Contexto de PDFs
+### Fluxo de Dados
 
 ```
-1. Usuário seleciona projeto no ProjectSelector
-   ↓
-2. App.tsx atualiza selectedProjectId e selectedProjectInfo
-   ↓
-3. ChatPanel exibe indicador "📚 X PDFs como contexto"
-   ↓
-4. Usuário envia mensagem no chat
-   ↓
-5. handleChat() chama ApiService.chat({ message, context, project_id })
-   ↓
-6. Backend /api/addin/chat:
-   - Carrega contexto dos PDFs via project_service
-   - Monta prompt com documentos de referência
-   - Chama Gemini AI
-   - Retorna resposta + context_info
-   ↓
-7. ChatPanel exibe resposta e metadados do contexto usado
-```
-
-### Análise ABNT
-
-```
-1. Usuário clica "Analisar Documento"
-   ↓
-2. DocumentService.getDocumentContentWithMargins()
-   - Extrai parágrafos, fontes, margens via Office.js
-   ↓
-3. ApiService.analyzeContent(content)
-   ↓
-4. Backend /api/addin/analyze-content:
-   - Verifica fonte, tamanho, alinhamento, espaçamento
-   - Verifica margens (3cm sup/esq, 2cm inf/dir)
-   - Verifica estrutura (introdução, conclusão, referências)
-   - Calcula score 0-100
-   ↓
-5. App.tsx exibe ComplianceScore e IssuesList
+Mensagem do usuario
+       |
+       v
+ChatPanel.handleSendMessage()
+       |
+       v
+App.handleChat() -- envia context, project_id, memory, history
+       |
+       v
+ApiService.chat(request)
+       |
+       v
+Backend /api/addin/chat
+       |
+       +-- project_service.get_context() -- RAG dos PDFs
+       +-- ai.py -- Gemini com prompt enriquecido
+       |
+       v
+ChatResponse { message, suggestions, context_info, generated_content,
+               was_reviewed, review_score, detailed_review }
+       |
+       v
+ChatPanel.addMessage('assistant', ...) -- renderiza no chat
 ```
 
 ---
 
-## Configuração
+## Landing Page (Next.js)
 
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-
-# Variáveis de ambiente (.env)
-GOOGLE_API_KEY=your_gemini_api_key
-```
-
-### Frontend
-```bash
-cd office-addin
-npm install
-npm run dev-server
-```
-
-### Executar
-```bash
-# Terminal 1 - Backend
-cd backend && python -m uvicorn main:app --reload --port 8000
-
-# Terminal 2 - Frontend
-cd office-addin && npm run dev-server
-```
+- **URL:** normaex.com.br
+- **Stack:** Next.js 16, React 19, Tailwind CSS 4
+- **Funcao:** Pagina de marketing/demonstracao
+- **Deploy:** Vercel (free tier)
 
 ---
 
 ## Tecnologias
 
 ### Backend
-- **Python 3.10+**
-- **FastAPI** - Framework web
-- **Pydantic** - Validação de dados
-- **Google Generative AI** - Gemini API
-- **PyMuPDF (fitz)** - Extração de PDF
-- **SSE-Starlette** - Server-Sent Events
+| Tecnologia | Uso |
+|------------|-----|
+| Python 3.10+ | Linguagem |
+| FastAPI | Framework web async |
+| Uvicorn | Servidor ASGI |
+| Pydantic | Validacao de dados |
+| google-generativeai | SDK Gemini AI |
+| PyMuPDF (fitz) | Extracao de PDF |
+| matplotlib | Geracao de graficos |
+| slowapi | Rate limiting |
+| sse-starlette | Server-Sent Events |
 
-### Frontend
-- **TypeScript**
-- **React 18**
-- **Office.js** - API do Microsoft Office
-- **Webpack** - Build
+### Office Add-in
+| Tecnologia | Uso |
+|------------|-----|
+| TypeScript 5.3 | Linguagem |
+| React 18 | UI framework |
+| Office.js | API Word (leitura/escrita) |
+| Webpack 5 | Bundler + dev server HTTPS |
+| Axios | HTTP client |
+| Marked.js | Markdown para HTML |
 
----
-
-## API Resumo
-
-| Rota | Método | Descrição |
-|------|--------|-----------|
-| `/api/addin/health` | GET | Health check |
-| `/api/addin/analyze-content` | POST | Análise ABNT |
-| `/api/addin/format-content` | POST | Instruções de formatação |
-| `/api/addin/chat` | POST | Chat com IA |
-| `/api/addin/write` | POST | Geração de texto |
-| `/api/addin/write-stream` | POST | Streaming de texto |
-| `/api/addin/improve` | POST | Melhoria de texto |
-| `/api/projects` | GET/POST | Listar/Criar projetos |
-| `/api/projects/{id}` | GET/PUT/DELETE | CRUD projeto |
-| `/api/projects/{id}/pdfs` | POST | Upload PDF |
-| `/api/projects/{id}/pdfs/{pdf_id}` | DELETE | Remover PDF |
-| `/api/projects/{id}/context` | GET | Contexto combinado |
+### Landing Page
+| Tecnologia | Uso |
+|------------|-----|
+| Next.js 16 | Framework React SSR |
+| Tailwind CSS 4 | Estilos |
+| Tiptap | Editor rich text |
 
 ---
 
-## Versão
+## Deploy
 
-**Normaex 2.0.0**
-- Office Add-in com React/TypeScript
-- Backend FastAPI com Gemini AI
-- Sistema de projetos com PDFs como contexto
-- Chat colaborativo com documentos de referência
+```
+Usuarios -> AppSource -> Word -> Add-in Frontend (Vercel)
+                                       |
+                                 API Backend (Railway/Render)
+                                       |
+                                 Google Gemini API
+```
+
+| Componente | Plataforma | Dominio |
+|------------|-----------|---------|
+| Landing Page | Vercel | normaex.com.br |
+| Office Add-in | Vercel | app.normaex.com.br |
+| Backend API | Railway/Render | api.normaex.com.br |
+
+---
+
+## Variaveis de Ambiente
+
+### Backend (.env)
+```
+GEMINI_API_KEY=<chave_api>
+PORT=8000
+ENVIRONMENT=development
+ALLOWED_ORIGINS=https://localhost:3001,https://normaex.com.br
+```
+
+---
+
+## Normas Suportadas
+
+| Norma | Chave | Fonte | Tamanho | Espacamento | Margens (cm) |
+|-------|-------|-------|---------|-------------|--------------|
+| ABNT NBR | `abnt` | Times New Roman | 12pt | 1.5 | 3/2/3/2 |
+| APA 7 | `apa` | Times New Roman | 12pt | 2.0 | 2.54 todos |
+| Vancouver | `vancouver` | Arial | 12pt | 2.0 | 2.54 todos |
+| IEEE | `ieee` | Times New Roman | 10pt | 1.0 | 1.78 todos |
+
+Config completa em `office-addin/src/config/norms.config.ts`
+
+---
+
+## Portas (Desenvolvimento)
+
+| Servico | Porta | Protocolo |
+|---------|-------|-----------|
+| Office Add-in | 3001 | HTTPS |
+| Backend API | 8000 | HTTP |
+| Frontend Next.js | 3000 | HTTP |
+
+Ver [OFFICE_ADDIN_DEV_GUIDE.md](OFFICE_ADDIN_DEV_GUIDE.md) para troubleshooting do ambiente de desenvolvimento.

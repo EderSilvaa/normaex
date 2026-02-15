@@ -76,7 +76,10 @@ module.exports = (env, argv) => {
         type: 'https',
         options: {
           key: fs.readFileSync(path.join(certPath, 'localhost.key')),
-          cert: fs.readFileSync(path.join(certPath, 'localhost.crt'))
+          cert: fs.readFileSync(path.join(certPath, 'localhost.crt')),
+          ca: fs.existsSync(path.join(certPath, 'ca.crt'))
+            ? fs.readFileSync(path.join(certPath, 'ca.crt'))
+            : undefined
         }
       },
       hot: true,
